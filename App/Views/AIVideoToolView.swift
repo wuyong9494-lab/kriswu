@@ -67,7 +67,7 @@ struct AIVideoToolView: View {
         }
     }
 
-    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var wmStore = WuMindStore.shared
     @ObservedObject private var sessionStore = AIVideoStudioSessionStore.shared
@@ -149,10 +149,8 @@ struct AIVideoToolView: View {
         _durationSeconds = State(initialValue: chosen.defaultDuration)
     }
 
-    private var isDark: Bool { colorScheme == .dark }
     private var canvasBg: Color { DS.Palette.background }
     private var cardBg: Color { DS.Palette.cardSurface }
-    private var cardBorder: Color { DS.Palette.hairline }
 
     private var useManagedGateway: Bool {
         wmStore.channel == .managed
@@ -223,6 +221,14 @@ struct AIVideoToolView: View {
                     if studioMode == .shortDrama {
                         WuMindShortDramaView(showingAPIConfig: $showingDramaAPIConfig)
                     } else {
+                        AppSectionCard(title: "镜头描述") {
+                            TextField("描述画面、镜头运动和光线", text: $sessionStore.prompt, axis: .vertical)
+                                .lineLimit(3...7)
+                                .font(DS.Font.body)
+                                .focused($promptFocused)
+                                .accessibilityLabel("镜头描述")
+                                .accessibilityIdentifier("ai.video.prompt")
+                        }
                         controlBar
 
                         if !hasKey {
@@ -240,25 +246,28 @@ struct AIVideoToolView: View {
 
                         if clips.isEmpty && !isGenerating {
                             emptyStage
-                        } else {
-                            ForEach(clips) { clip in
-                                clipCard(clip)
+                        } else if !clips.isEmpty {
+                            Text("生成结果")
+                                .font(DS.Font.headline)
+                                .accessibilityAddTraits(.isHeader)
+                            LazyVStack(spacing: DS.Space.m) {
+                                ForEach(clips) { clip in
+                                    clipCard(clip)
+                                }
                             }
                         }
                     }
 
-                    Color.clear.frame(height: 16)
                 }
-                .padding(.horizontal, 14)
-                .padding(.top, 10)
-                .frame(maxWidth: 760)
+                .padding(DS.Space.m)
+                .frame(maxWidth: DS.readableWidth)
                 .frame(maxWidth: .infinity)
             }
             .scrollDismissesKeyboard(.interactively)
             .background(canvasBg.ignoresSafeArea())
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if studioMode == .singleClip {
-                    floatingComposer
+                    generateBar
                 }
             }
             .onChange(of: isGenerating) { active in
@@ -294,6 +303,7 @@ struct AIVideoToolView: View {
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(configured ? .green : .orange)
                         }
+                        .accessibilityLabel(studioMode == .shortDrama ? "短剧接口配置" : "配置服务商 Key")
                         .accessibilityIdentifier("ai.video.keyConfig")
                     }
                 }
@@ -395,50 +405,37 @@ struct AIVideoToolView: View {
     }
 
     private var studioModeSwitcher: some View {
-        HStack(spacing: 6) {
+        let layout = typeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(spacing: DS.Space.xxs))
+            : AnyLayout(HStackLayout(spacing: DS.Space.xxs))
+        return layout {
             ForEach(StudioMode.allCases) { mode in
                 let selected = studioMode == mode
                 Button {
-                    withAnimation(.easeInOut(duration: 0.18)) {
-                        studioMode = mode
-                    }
-                    Haptics.tap()
+                    promptFocused = false
+                    studioMode = mode
+                    Haptics.select()
                 } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: mode.icon)
-                            .font(.caption.weight(.bold))
-                        Text(mode.title)
-                            .font(.caption.weight(.bold))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.85)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 9)
-                    .padding(.horizontal, 10)
-                    .foregroundStyle(selected ? .white : .secondary)
-                    .background(
-                        LinearGradient(
-                            colors: selected
-                                ? (mode == .shortDrama ? [.pink, .purple] : [.purple, .indigo])
-                                : [.clear, .clear],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        ),
-                        in: RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    )
+                    Label(mode.title, systemImage: mode.icon)
+                        .font(.subheadline.weight(.semibold))
+                        .padding(.horizontal, DS.Space.xs)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .foregroundStyle(.primary)
+                        .background(selected ? cardBg : .clear, in: RoundedRectangle(cornerRadius: DS.Radius.s))
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityAddTraits(selected ? .isSelected : [])
                 .accessibilityIdentifier("ai.video.mode.\(mode.rawValue)")
             }
         }
-        .padding(4)
-        .background(cardBg, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
+        .padding(DS.Space.xxs)
+        .background(DS.Palette.surfaceSunken, in: RoundedRectangle(cornerRadius: DS.Radius.m))
     }
 
     private var controlBar: some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 8) {
+        AppSectionCard(title: "生成参数") {
+            VStack(alignment: .leading, spacing: 0) {
                 Menu {
                     if useManagedGateway {
                         ForEach(wmStore.enabledManagedVideoModels) { m in
@@ -475,22 +472,7 @@ struct AIVideoToolView: View {
                         }
                     }
                 } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "film.stack.fill")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(.purple)
-                        Text(activeModelDisplayName)
-                            .font(.caption.weight(.bold))
-                            .lineLimit(1)
-                        Image(systemName: "chevron.up.chevron.down")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.horizontal, 11)
-                    .padding(.vertical, 8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(cardBg, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
+                    parameterRow("模型", value: activeModelDisplayName)
                 }
                 .tint(.primary)
                 .accessibilityIdentifier("ai.video.model")
@@ -500,20 +482,16 @@ struct AIVideoToolView: View {
                         Button(ratio.displayLabel) { aspect = ratio }
                     }
                 } label: {
-                    compactChip(icon: "aspectratio", text: aspect.displayLabel)
+                    parameterRow("画幅", value: aspect.displayLabel)
                 }
                 .tint(.primary)
                 .accessibilityIdentifier("ai.video.aspect")
-            }
-
-            HStack(spacing: 8) {
                 Menu {
                     ForEach(validDurations, id: \.self) { sec in
                         Button("\(sec) 秒") { durationSeconds = sec }
                     }
                 } label: {
-                    compactChip(icon: "timer", text: "\(durationSeconds) 秒")
-                        .frame(maxWidth: .infinity)
+                    parameterRow("时长", value: "\(durationSeconds) 秒")
                 }
                 .tint(.primary)
                 .accessibilityIdentifier("ai.video.duration")
@@ -523,31 +501,24 @@ struct AIVideoToolView: View {
                         Button(res.displayLabel) { resolution = res }
                     }
                 } label: {
-                    compactChip(icon: "sparkles.tv", text: resolution.displayLabel)
-                        .frame(maxWidth: .infinity)
+                    parameterRow("分辨率", value: resolution.displayLabel)
                 }
                 .tint(.primary)
 
-                if useManagedGateway {
-                    compactChip(icon: "bolt.shield.fill", text: wmStore.isBillingExempt ? "内置·免扣" : "内置网关")
-                        .frame(maxWidth: .infinity)
-                } else if let relayHost = AIProviderEndpoints.displayHost(for: model.provider) {
-                    compactChip(icon: "server.rack", text: relayHost)
-                        .frame(maxWidth: .infinity)
-                } else {
-                    compactChip(icon: "checkmark.seal", text: "官方直连")
-                        .frame(maxWidth: .infinity)
-                }
+                Divider()
+                let channel = useManagedGateway
+                    ? (wmStore.isBillingExempt ? "内置通道 · 免扣费" : "内置通道")
+                    : (AIProviderEndpoints.displayHost(for: model.provider) ?? "官方直连")
+                Label(channel, systemImage: useManagedGateway ? "bolt.shield" : "network")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, DS.Space.s)
             }
 
             if let syncStatusNote, !useManagedGateway {
                 HStack(spacing: 6) {
                     if isSyncingModels {
                         ProgressView().controlSize(.mini)
-                    } else {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.caption2)
-                            .foregroundStyle(.green)
                     }
                     Text(syncStatusNote)
                         .font(.caption2)
@@ -559,80 +530,52 @@ struct AIVideoToolView: View {
         }
     }
 
-    private func compactChip(icon: String, text: String) -> some View {
-        HStack(spacing: 5) {
-            Image(systemName: icon)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-            Text(text)
-                .font(.caption.weight(.semibold))
-                .lineLimit(1)
+    private func parameterRow(_ title: String, value: String) -> some View {
+        LabeledContent {
+            HStack(spacing: DS.Space.xs) {
+                Text(value)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption)
+                    .accessibilityHidden(true)
+            }
+        } label: {
+            Text(title)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(cardBg, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
+        .font(.subheadline)
+        .padding(.vertical, DS.Space.xxs)
+        .frame(minHeight: 44)
+        .contentShape(Rectangle())
     }
 
     private var missingKeyCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
-                Image(systemName: useManagedGateway ? "slider.horizontal.3" : "key.fill")
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(.orange)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(useManagedGateway ? "内置视频通道暂不可用" : "尚未配置 \(model.provider.displayName) API Key")
-                        .font(.caption.weight(.bold))
-                    Text(useManagedGateway
-                         ? "请联系管理员检查内置网关及可用视频模型。"
-                         : "请保存此服务商的 API Key。")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 4)
-                if !useManagedGateway {
-                    Button("去配置") {
-                        configuringProvider = model.provider
-                    }
-                    .font(.caption.weight(.bold))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(Color.orange.opacity(0.16), in: Capsule())
-                    .foregroundStyle(.orange)
-                }
-            }
-
+        AppSectionCard {
+            Label(useManagedGateway ? "内置视频通道暂不可用" : "尚未配置 \(model.provider.displayName) API Key",
+                  systemImage: useManagedGateway ? "exclamationmark.circle" : "key")
+                .font(DS.Font.headline)
             if useManagedGateway {
-                HStack(spacing: 8) {
-                    Button {
-                        Haptics.tap()
-                        wmStore.setChannel(.ownAPI)
-                        clampParametersForActiveModel()
-                    } label: {
-                        Label("切换「自带 API」", systemImage: "arrow.left.arrow.right")
-                            .font(.caption2.weight(.bold))
-                            .padding(.horizontal, 11)
-                            .padding(.vertical, 7)
-                            .background(Color.orange.opacity(0.16), in: Capsule())
-                            .foregroundStyle(.orange)
-                    }
-                    .buttonStyle(.plain)
+                Text("请联系管理员检查内置网关及可用视频模型。")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Button("切换至自有通道") {
+                    Haptics.tap()
+                    wmStore.setChannel(.ownAPI)
+                    clampParametersForActiveModel()
                 }
+                .frame(minHeight: 44)
+            } else {
+                Button("配置服务商 Key") { configuringProvider = model.provider }
+                    .frame(minHeight: 44)
             }
         }
-        .padding(12)
-        .background(cardBg, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 15, style: .continuous).strokeBorder(Color.orange.opacity(0.32), lineWidth: 1))
     }
 
     private var emptyStage: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("镜头示例")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 2)
+                .font(DS.Font.headline)
+                .accessibilityAddTraits(.isHeader)
 
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: typeSize.isAccessibilitySize ? 290 : 146), spacing: DS.Space.xs)], spacing: DS.Space.xs) {
                 ForEach(Self.inspirations) { card in
                     Button {
                         Haptics.tap()
@@ -689,34 +632,36 @@ struct AIVideoToolView: View {
     }
 
     private func clipCard(_ clip: GeneratedClip) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let ratio: CGFloat = {
+            switch clip.aspect {
+            case .portrait9x16: return 9.0 / 16.0
+            case .landscape16x9: return 16.0 / 9.0
+            case .square1x1: return 1
+            }
+        }()
+        return AppSectionCard {
             if activeClipID == clip.id, let player = activePlayer {
                 VideoPlayer(player: player)
-                    .frame(height: clip.aspect == .portrait9x16 ? 380 : 220)
+                    .aspectRatio(ratio, contentMode: .fit)
+                    .frame(maxHeight: 380)
+                    .frame(maxWidth: .infinity)
                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             } else {
                 Button {
                     play(clip)
                 } label: {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(LinearGradient(colors: [Color(red: 0.10, green: 0.12, blue: 0.20), Color(red: 0.22, green: 0.14, blue: 0.34)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                            .frame(height: 190)
-                        VStack(spacing: 8) {
-                            Image(systemName: "play.circle.fill")
-                                .font(.system(size: 48))
-                                .foregroundStyle(.white)
-                            Text("点击播放 MP4 成片")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.white.opacity(0.88))
-                        }
-                    }
+                    VideoClipPoster(url: clip.fileURL)
+                        .aspectRatio(ratio, contentMode: .fit)
+                        .frame(maxHeight: 380)
+                        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.m))
+                        .accessibilityLabel("播放成片")
                 }
                 .buttonStyle(.plain)
+                .frame(maxWidth: .infinity)
             }
 
             Text(clip.prompt)
-                .font(.caption)
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.primary)
                 .lineLimit(3)
 
@@ -730,14 +675,10 @@ struct AIVideoToolView: View {
                         .font(.caption.weight(.bold))
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
-                        .background(Color.purple.opacity(0.16), in: Capsule())
-                        .foregroundStyle(.purple)
+                        .frame(minHeight: 44)
                 }
             }
         }
-        .padding(12)
-        .background(cardBg, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
     }
 
     private func errorBanner(_ message: String) -> some View {
@@ -758,22 +699,14 @@ struct AIVideoToolView: View {
                 }
             }
             if !isGenerating {
-                HStack(spacing: 8) {
-                    if let pending = unconfirmedJob {
-                        Button("恢复查询进度（原任务）") {
-                            resumeUnconfirmedJob(pending)
-                        }
-                        .font(.caption2.weight(.bold))
-                        .buttonStyle(.borderedProminent)
-                        .tint(.purple)
-                        .controlSize(.mini)
-                    } else if !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                VStack(alignment: .leading, spacing: DS.Space.xs) {
+                    if unconfirmedJob == nil && !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         Button("重新发起（新任务）") {
                             startGeneration()
                         }
-                        .font(.caption2.weight(.bold))
+                        .font(.subheadline.weight(.semibold))
                         .buttonStyle(.bordered)
-                        .controlSize(.mini)
+                        .controlSize(.regular)
                     }
                     if unconfirmedJob == nil && !useManagedGateway && openAIUsesRelay && model.id.lowercased().hasPrefix("sora-") {
                         if let wan = AIVideoTool.models.first(where: { $0.id == "wan2.6-t2v" }) {
@@ -783,10 +716,9 @@ struct AIVideoToolView: View {
                                 clampParametersForActiveModel()
                                 errorMessage = nil
                             }
-                            .font(.caption2.weight(.bold))
-                            .buttonStyle(.borderedProminent)
-                            .tint(.purple)
-                            .controlSize(.mini)
+                            .font(.subheadline.weight(.semibold))
+                            .buttonStyle(.bordered)
+                            .controlSize(.regular)
                         }
                         if let veo = AIVideoTool.models.first(where: { $0.id == "veo-3.1-fast-generate-preview" }) {
                             Button("改用 Veo 3.1 Fast") {
@@ -795,9 +727,9 @@ struct AIVideoToolView: View {
                                 clampParametersForActiveModel()
                                 errorMessage = nil
                             }
-                            .font(.caption2.weight(.bold))
+                            .font(.subheadline.weight(.semibold))
                             .buttonStyle(.bordered)
-                            .controlSize(.mini)
+                            .controlSize(.regular)
                         }
                     }
                 }
@@ -808,59 +740,33 @@ struct AIVideoToolView: View {
         .background(Color.orange.opacity(0.13), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
-    private var floatingComposer: some View {
-        VStack(spacing: 0) {
-            HStack(alignment: .bottom, spacing: 8) {
-                TextField("描述你想生成的视频画面、镜头运动与光线…", text: $sessionStore.prompt, axis: .vertical)
-                    .lineLimit(1...4)
-                    .font(.subheadline)
-                    .focused($promptFocused)
-                    .submitLabel(.done)
-                    .padding(.vertical, 8)
-                    .padding(.leading, 8)
-                    .accessibilityIdentifier("ai.video.prompt")
-
-                Button {
-                    startGeneration()
-                } label: {
-                    ZStack {
-                        Circle()
-                            .fill(
-                                canSubmit
-                                    ? LinearGradient(colors: [.purple, .indigo], startPoint: .topLeading, endPoint: .bottomTrailing)
-                                    : LinearGradient(colors: [Color.secondary.opacity(0.28), Color.secondary.opacity(0.28)], startPoint: .top, endPoint: .bottom)
-                            )
-                            .frame(width: 38, height: 38)
-                        if isGenerating {
-                            ProgressView().tint(.white).controlSize(.small)
-                        } else {
-                            Image(systemName: "arrow.up")
-                                .font(.subheadline.weight(.bold))
-                                .foregroundStyle(.white)
-                        }
-                    }
+    private var generateBar: some View {
+        HStack(spacing: DS.Space.s) {
+            if promptFocused {
+                Button { promptFocused = false } label: {
+                    Image(systemName: "keyboard.chevron.compact.down")
+                        .frame(width: 44, height: 44)
                 }
-                .buttonStyle(.plain)
-                .disabled(!canSubmit)
-                .accessibilityIdentifier("ai.video.generate")
+                .accessibilityLabel("收起键盘")
+                .accessibilityIdentifier("ai.video.dismissKeyboard")
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
-            .shadow(color: .black.opacity(isDark ? 0.35 : 0.10), radius: 14, y: 4)
-            .padding(.horizontal, 12)
-            .padding(.top, 6)
-            .padding(.bottom, 8)
+            let pending = unconfirmedJob
+            AppPrimaryCTA(title: isGenerating ? "正在生成" : (pending == nil ? "生成视频" : "恢复查询进度（原任务）"),
+                          icon: pending == nil ? "play.fill" : "arrow.clockwise",
+                          isLoading: isGenerating, isDisabled: pending == nil && !canSubmit) {
+                if let pending {
+                    resumeUnconfirmedJob(pending)
+                } else {
+                    startGeneration()
+                }
+            }
+            .accessibilityIdentifier("ai.video.generate")
         }
-        .background(
-            LinearGradient(
-                colors: [canvasBg.opacity(0), canvasBg.opacity(0.92), canvasBg],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea(edges: .bottom)
-        )
+        .padding(.horizontal, DS.Space.m)
+        .padding(.vertical, DS.Space.xs)
+        .frame(maxWidth: DS.readableWidth)
+        .frame(maxWidth: .infinity)
+        .background(.bar)
     }
 
     private func startGeneration() {
@@ -1231,6 +1137,39 @@ struct AIVideoToolView: View {
     }
 }
 
+private struct VideoClipPoster: View {
+    let url: URL
+    @State private var still: CGImage?
+
+    var body: some View {
+        Rectangle()
+            .fill(Color.black)
+            .overlay {
+                if let still {
+                    Image(decorative: still, scale: 1)
+                        .resizable()
+                        .scaledToFit()
+                }
+            }
+            .overlay {
+                Image(systemName: "play.fill")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 52, height: 52)
+                    .background(.black.opacity(0.65), in: Circle())
+            }
+            .task(id: url) {
+                still = nil
+                guard url.isFileURL else { return }
+                let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
+                generator.appliesPreferredTrackTransform = true
+                generator.maximumSize = CGSize(width: 720, height: 720)
+                let frame = try? await generator.image(at: .zero)
+                if !Task.isCancelled { still = frame?.image }
+            }
+    }
+}
+
 /// Quiet, full-screen progress canvas shared by a chat video and the single-shot studio.
 /// A missing progress value stays indeterminate. The video controls never control remote work.
 @MainActor
@@ -1390,9 +1329,6 @@ struct WuMindVideoGenerationStage: View {
                         .lineLimit(2)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .accessibilityIdentifier("wumind.video.stage.prompt")
-                    Label("智能体", systemImage: "sparkles")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 11)

@@ -10,6 +10,7 @@ import UniformTypeIdentifiers
 @MainActor
 struct AIImageToolView: View {
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dynamicTypeSize) private var typeSize
     @ObservedObject private var wmStore = WuMindStore.shared
     @ObservedObject private var sessionStore = AIImageStudioSessionStore.shared
 
@@ -225,8 +226,6 @@ struct AIImageToolView: View {
         colorScheme == .dark
     }
 
-    private var canvasBackground: Color { DS.Palette.background }
-
     private var providerAccent: Color {
         switch model.provider {
         case .openAI: return Color(red: 0.10, green: 0.72, blue: 0.54)
@@ -307,18 +306,13 @@ struct AIImageToolView: View {
 
     var body: some View {
         ZStack {
-            studioBackdrop
+            DS.Palette.background.ignoresSafeArea()
 
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 14) {
-                        Color.clear.frame(height: 2).id("studio.top")
-
-                        routeStatusBar
-
-                        if !isReadyToGenerate {
-                            availabilityBanner
-                        }
+                        imageMaterials
+                        imageParameters
 
                         if let stage = liveStageLabel, isGenerating {
                             HStack(spacing: 8) {
@@ -327,9 +321,6 @@ struct AIImageToolView: View {
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(.primary)
                                 Spacer()
-                                Text("已归档「我的作品」")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
                             }
                             .padding(.horizontal, 12)
                             .padding(.vertical, 9)
@@ -345,25 +336,30 @@ struct AIImageToolView: View {
                         if sessions.isEmpty {
                             emptyStudioGallery
                         } else {
+                            Text("生成结果")
+                                .font(DS.Font.headline)
+                                .accessibilityAddTraits(.isHeader)
+                            if let latest = latestUpgradeableSession {
+                                Button {
+                                    Haptics.tap()
+                                    triggerHDUpgrade(prompt: latest.rawPrompt)
+                                } label: {
+                                    Label("提高质量", systemImage: "sparkles")
+                                        .frame(minHeight: 44)
+                                }
+                                .accessibilityIdentifier("ai.image.upscale")
+                            }
                             ForEach(sessions) { session in
                                 sessionBlock(session)
                                     .id(session.id)
                             }
                         }
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.top, 8)
-                    .padding(.bottom, 22)
-                    .frame(maxWidth: 820)
+                    .padding(DS.Space.m)
+                    .frame(maxWidth: DS.readableWidth)
                     .frame(maxWidth: .infinity)
                 }
                 .scrollDismissesKeyboard(.interactively)
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    if promptFocused {
-                        dismissKeyboard()
-                    }
-                }
                 .onChange(of: sessions.first?.id) { firstID in
                     guard let firstID else { return }
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.86)) {
@@ -393,14 +389,11 @@ struct AIImageToolView: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            floatingBottomDock
+            generateBar
         }
         .navigationTitle("画室")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .principal) {
-                modelPickerPill
-            }
             ToolbarItem(placement: .navigationBarTrailing) {
                 HStack(spacing: 8) {
                     Button {
@@ -566,58 +559,10 @@ struct AIImageToolView: View {
         // Only explicit user tap on 「停止 / 取消」 calls `stopGeneration()`.
     }
 
-    // MARK: - Backdrop
-
-    private var studioBackdrop: some View {
-        ZStack {
-            canvasBackground.ignoresSafeArea()
-            RadialGradient(
-                colors: [
-                    providerAccent.opacity(isDark ? 0.16 : 0.08),
-                    Color.clear,
-                ],
-                center: .top,
-                startRadius: 12,
-                endRadius: 360
-            )
-            .ignoresSafeArea()
-            .allowsHitTesting(false)
-        }
-    }
-
-    // MARK: - Explicit Route & Connection Status Bar
-
     private var routeStatusBar: some View {
-        let route = availabilityState.routeKind
-        let badgeColor: Color = {
-            switch route {
-            case .managedGateway: return .indigo
-            case .ownAIHubMix: return .purple
-            case .ownDirectVendor: return .teal
-            }
-        }()
-        let subtitle: String = {
-            switch availabilityState {
-            case .ready(_, _, let detail, _, _):
-                return detail
-            case .managedCatalogSyncing:
-                return "正在同步网关已开通的生图能力…"
-            case .managedGatewayConfigInvalid:
-                return "内置网关暂不可用，请联系管理员"
-            case .managedModelNotEnabled(_, let name, _):
-                return "\(name) 内置暂未开通（不读本机 Key）"
-            case .managedLoginRequired:
-                return "走 WuMind 凭证与余额，请先登录或检查网关"
-            case .missingConnection(_, _, _, _):
-                return route == .ownAIHubMix ? "请保存 AIHubMix Key" : "可选 AIHubMix 统一连接或厂商直连 Key"
-            case .referenceImageUnsupported(_, let name):
-                return "\(name) 仅支持纯文生图"
-            }
-        }()
-
-        return HStack(spacing: 10) {
+        HStack(spacing: DS.Space.xs) {
             Menu {
-                Section("显式切换生图路由（绝不静默切换）") {
+                Section("生图通道") {
                     Button {
                         Haptics.select()
                         managedSelectedImageID = activeEvaluationModel.id
@@ -639,7 +584,7 @@ struct AIImageToolView: View {
                     } label: {
                         let active = !useManagedGateway && availabilityState.routeKind == .ownAIHubMix
                         Label(
-                            "自有 API · AIHubMix（一套 Key 驱动 GPT + Nano Banana 2）",
+                            "自有 API · AIHubMix",
                             systemImage: active ? "checkmark.circle.fill" : "network"
                         )
                     }
@@ -675,66 +620,26 @@ struct AIImageToolView: View {
                     }
                 }
             } label: {
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(isReadyToGenerate ? badgeColor : Color.orange)
-                        .frame(width: 7, height: 7)
-                    Text(availabilityState.routeBadge)
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(badgeColor)
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(badgeColor.opacity(0.8))
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(badgeColor.opacity(0.13), in: Capsule())
+                parameterRow("通道", value: availabilityState.routeBadge)
             }
             .buttonStyle(.plain)
             .disabled(isGenerating)
             .accessibilityIdentifier("ai.image.routeBadge")
-
-            Text(subtitle)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Spacer(minLength: 4)
-
             if useManagedGateway {
-                if wmStore.isBillingExempt {
-                    Text("免扣费")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(.green)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.green.opacity(0.12), in: Capsule())
-                } else {
-                    Text(wmStore.managedBalanceYuan.map { String(format: "¥%.2f", $0) } ?? "未同步")
-                        .font(.caption2.weight(.bold).monospacedDigit())
-                        .foregroundStyle(.primary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.secondary.opacity(0.12), in: Capsule())
-                }
                 Button {
                     Haptics.tap()
                     refreshManagedCatalogIfNeeded(force: true)
                 } label: {
-                    if isSyncingManagedCatalog {
-                        ProgressView().controlSize(.mini)
-                    } else {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(.secondary)
+                    Group {
+                        if isSyncingManagedCatalog { ProgressView().controlSize(.small) }
+                        else { Image(systemName: "arrow.clockwise") }
                     }
+                    .frame(width: 44, height: 44)
                 }
-                .buttonStyle(.plain)
                 .disabled(isSyncingManagedCatalog || isGenerating)
                 .accessibilityLabel("刷新内置生图目录")
             } else {
-                Button {
+                Button("连接") {
                     dismissKeyboard()
                     Haptics.tap()
                     if availabilityState.routeKind == .ownAIHubMix || ownConnectionPreference == .aihubmix {
@@ -742,30 +647,16 @@ struct AIImageToolView: View {
                     } else {
                         settingKey = true
                     }
-                } label: {
-                    Text(availabilityState.routeKind == .ownAIHubMix ? "AIHubMix" : "连接")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(badgeColor)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(badgeColor.opacity(0.12), in: Capsule())
                 }
-                .buttonStyle(.plain)
+                .frame(minHeight: 44)
                 .disabled(isGenerating)
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 15, style: .continuous)
-                .strokeBorder(badgeColor.opacity(0.24), lineWidth: 0.9)
-        )
     }
 
-    // MARK: - Top Model Picker Pill
+    // MARK: - Model selection
 
-    private var modelPickerPill: some View {
+    private var modelPicker: some View {
         Menu {
             if useManagedGateway {
                 Section("WuMind 内置已开通生图（网关实测）") {
@@ -847,24 +738,9 @@ struct AIImageToolView: View {
                 }
             }
         } label: {
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(isReadyToGenerate ? providerAccent : Color.orange)
-                    .frame(width: 7, height: 7)
-                Text(activeModelDisplayName)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(.ultraThinMaterial, in: Capsule())
-            .overlay(Capsule().strokeBorder(Color.primary.opacity(isDark ? 0.14 : 0.09), lineWidth: 0.8))
+            parameterRow("模型", value: activeModelDisplayName)
         }
-        .tint(.primary)
+        .buttonStyle(.plain)
         .disabled(isGenerating)
         .accessibilityIdentifier("ai.image.model")
     }
@@ -884,130 +760,48 @@ struct AIImageToolView: View {
             case .ready: return "checkmark.circle.fill"
             }
         }()
-        let tintColor: Color = {
+        return VStack(alignment: .leading, spacing: DS.Space.xs) {
+            Label(state.bannerTitle ?? "暂不可生成", systemImage: iconName)
+                .font(.subheadline.weight(.semibold))
+            if let detail = state.bannerDetail {
+                Text(detail)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             switch state {
-            case .managedCatalogSyncing: return .indigo
-            case .managedModelNotEnabled: return .indigo
-            default: return .orange
-            }
-        }()
-
-        return VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: iconName)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(tintColor)
-                    .frame(width: 32, height: 32)
-                    .background(tintColor.opacity(0.14), in: Circle())
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(state.bannerTitle ?? "暂不可生成")
-                        .font(.footnote.weight(.bold))
-                        .foregroundStyle(.primary)
-                    if let detail = state.bannerDetail {
-                        Text(detail)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+            case .managedModelNotEnabled(_, _, let hasOther):
+                if hasOther, let first = wmStore.enabledManagedImageModels.first {
+                    Button("切至 \(first.displayName)") { managedSelectedImageID = first.id }
+                        .frame(minHeight: 44)
                 }
-                Spacer(minLength: 4)
-            }
-
-            HStack(spacing: 8) {
-                switch state {
-                case .managedGatewayConfigInvalid:
-                    Text("请联系管理员检查内置网关配置。")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.orange)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                case .managedModelNotEnabled(_, _, let hasOther):
-                    if hasOther, let firstReady = wmStore.enabledManagedImageModels.first {
-                        Button {
-                            Haptics.tap()
-                            managedSelectedImageID = firstReady.id
-                        } label: {
-                            Text("切至 \(firstReady.displayName)")
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 7)
-                                .background(Color.indigo, in: Capsule())
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    Button {
-                        Haptics.tap()
-                        refreshManagedCatalogIfNeeded(force: true)
-                    } label: {
-                        Text(isSyncingManagedCatalog ? "同步中…" : "刷新内置目录")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.primary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
-                            .background(Color.primary.opacity(0.09), in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(isSyncingManagedCatalog)
-
-                case .missingConnection(_, _, _, let action):
-                    Button {
+                Button(isSyncingManagedCatalog ? "同步中…" : "刷新内置目录") {
+                    refreshManagedCatalogIfNeeded(force: true)
+                }
+                .frame(minHeight: 44)
+                .disabled(isSyncingManagedCatalog)
+            case .missingConnection(_, _, _, let action):
+                Button("配置 AIHubMix") {
+                    dismissKeyboard()
+                    settingAIHubMix = true
+                }
+                    .frame(minHeight: 44)
+                if case .configureDirectVendor = action {
+                    Button("配置 \(model.provider.displayName) Key") {
                         dismissKeyboard()
-                        Haptics.tap()
-                        settingAIHubMix = true
-                    } label: {
-                        Text("配置 AIHubMix")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
-                            .background(Color.purple, in: Capsule())
+                        settingKey = true
                     }
-                    .buttonStyle(.plain)
-
-                    if case .configureDirectVendor = action {
-                        Button {
-                            dismissKeyboard()
-                            Haptics.tap()
-                            settingKey = true
-                        } label: {
-                            Text("配置 \(model.provider.displayName) Key")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.primary)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 7)
-                                .background(Color.primary.opacity(0.09), in: Capsule())
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                case .referenceImageUnsupported:
-                    Button {
-                        Haptics.tap()
-                        switchToReferenceCapableModel()
-                    } label: {
-                        Text("切换支持参考图的模型")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
-                            .background(Color.orange, in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-
-                case .managedCatalogSyncing, .managedLoginRequired, .ready:
-                    EmptyView()
+                        .frame(minHeight: 44)
                 }
+            case .referenceImageUnsupported:
+                Button("切换支持参考图的模型") { switchToReferenceCapableModel() }
+                    .frame(minHeight: 44)
+                    .accessibilityIdentifier("ai.image.refUnsupportedBanner")
+            case .managedGatewayConfigInvalid, .managedLoginRequired, .managedCatalogSyncing, .ready:
+                EmptyView()
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(tintColor.opacity(0.30), lineWidth: 0.9)
-        )
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityIdentifier("ai.image.availabilityBanner")
     }
 
@@ -1017,27 +811,20 @@ struct AIImageToolView: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Text("灵感模板")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .font(DS.Font.headline)
+                    .accessibilityAddTraits(.isHeader)
                 Spacer()
                 if let customHost {
                     Label("中转 \(customHost)", systemImage: "network")
                         .font(.caption2.weight(.medium))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
-                } else {
-                    Text("点击即可填入提示词")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
                 }
             }
             .padding(.horizontal, 2)
 
             LazyVGrid(
-                columns: [
-                    GridItem(.flexible(), spacing: 10),
-                    GridItem(.flexible(), spacing: 10),
-                ],
+                columns: [GridItem(.adaptive(minimum: typeSize.isAccessibilitySize ? 285 : 140), spacing: DS.Space.s)],
                 spacing: 10
             ) {
                 ForEach(Self.inspirations) { card in
@@ -1348,210 +1135,141 @@ struct AIImageToolView: View {
             }
         }()
 
-        return VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 8) {
-                Image(systemName: "exclamationmark.circle.fill")
-                    .foregroundStyle(DS.Palette.danger)
-                    .font(.system(size: 16))
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 6) {
-                        Text(categoryTitle)
-                            .font(.footnote.weight(.bold))
-                            .foregroundStyle(.primary)
-                        Text(categoryTag)
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(DS.Palette.danger)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(DS.Palette.danger.opacity(0.12), in: Capsule())
-                    }
-                    Text(message)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text(targetDisplay)
-                        .font(.caption2.monospaced())
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            HStack(spacing: 8) {
-                if let retryPrompt, !retryPrompt.isEmpty {
-                    Button {
-                        Haptics.tap()
-                        startGeneration(rawPrompt: retryPrompt, overrideQuality: nil)
-                    } label: {
-                        Label(safeRetryLabel, systemImage: "arrow.clockwise")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(providerAccent, in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                if useManagedGateway {
-                    Button {
-                        Haptics.tap()
-                        refreshManagedCatalogIfNeeded(force: true)
-                    } label: {
-                        Label("刷新内置目录", systemImage: "arrow.triangle.2.circlepath")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.primary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(Color.primary.opacity(0.09), in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                } else {
-                    Button {
-                        dismissKeyboard()
-                        if route == .ownAIHubMix || ownConnectionPreference == .aihubmix {
-                            settingAIHubMix = true
-                        } else {
-                            settingKey = true
-                        }
-                    } label: {
-                        Label(route == .ownAIHubMix ? "检查 AIHubMix 连接" : "检查 Key / 接口", systemImage: "key")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.primary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(Color.primary.opacity(0.09), in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                if !diagnostics.isEmpty {
-                    Button {
-                        dismissKeyboard()
-                        showingDiagnostics = true
-                    } label: {
-                        Label("诊断", systemImage: "waveform.path.ecg")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(Color.primary.opacity(0.07), in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(DS.Palette.danger.opacity(0.32), lineWidth: 0.9)
-        )
-    }
-
-    // MARK: - Floating Frosted-Glass Bottom Composer Dock (Zero Keyboard Occlusion!)
-
-    private var floatingBottomDock: some View {
-        VStack(spacing: 9) {
-            // Grok-style floating "提高质量" pill right above the composer when viewing a fast/balanced result
-            if !promptFocused, let latest = latestUpgradeableSession {
+        return AppSectionCard {
+            Label(categoryTitle, systemImage: "exclamationmark.circle")
+                .font(DS.Font.headline)
+            Text(message).font(.subheadline)
+            Text("\(categoryTag) · \(targetDisplay)")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            if let retryPrompt, !retryPrompt.isEmpty {
                 Button {
                     Haptics.tap()
-                    triggerHDUpgrade(prompt: latest.rawPrompt)
+                    startGeneration(rawPrompt: retryPrompt, overrideQuality: nil)
                 } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 12.5, weight: .bold))
-                        Text("提高质量")
-                            .font(.footnote.weight(.semibold))
-                    }
-                    .foregroundStyle(isDark ? .white : .primary)
-                    .padding(.horizontal, 15)
-                    .padding(.vertical, 8)
-                    .background(.ultraThinMaterial, in: Capsule())
-                    .overlay(
-                        Capsule().strokeBorder(Color.white.opacity(isDark ? 0.22 : 0.45), lineWidth: 0.9)
-                    )
-                    .shadow(color: .black.opacity(0.28), radius: 12, y: 6)
+                    Label(safeRetryLabel, systemImage: "arrow.clockwise")
+                        .frame(minHeight: 44)
                 }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("ai.image.upscale")
-                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
+            if useManagedGateway {
+                Button("刷新内置目录") { refreshManagedCatalogIfNeeded(force: true) }
+                    .frame(minHeight: 44)
+            } else {
+                Button(route == .ownAIHubMix ? "检查 AIHubMix 连接" : "检查 Key / 接口") {
+                    dismissKeyboard()
+                    if route == .ownAIHubMix || ownConnectionPreference == .aihubmix {
+                        settingAIHubMix = true
+                    } else {
+                        settingKey = true
+                    }
+                }
+                .frame(minHeight: 44)
+            }
+            if !diagnostics.isEmpty {
+                Button("诊断") {
+                    dismissKeyboard()
+                    showingDiagnostics = true
+                }
+                .frame(minHeight: 44)
+            }
+        }
+    }
 
-            // Row 1: Floating Frosted-Glass Controls Strip (zero horizontal overflow — fits 375pt cleanly!)
-            HStack(spacing: 7) {
-                // Grok-style 极速 | 质量 segmented glass pill
-                speedToggleCapsule
+    private var imageMaterials: some View {
+        AppSectionCard(title: "画面描述") {
+            TextField(referenceImage == nil ? "描述主体、构图和光线" : "描述如何修改参考图",
+                      text: $sessionStore.prompt, axis: .vertical)
+                .font(DS.Font.body)
+                .lineLimit(3...7)
+                .focused($promptFocused)
+                .disabled(isGenerating)
+                .submitLabel(.send)
+                .onSubmit { handleGenerateTap() }
+                .accessibilityLabel("画面描述")
+                .accessibilityIdentifier("ai.image.prompt")
+            Divider()
+            if let referenceThumbnail {
+                HStack(spacing: DS.Space.s) {
+                    Image(uiImage: referenceThumbnail)
+                        .resizable().scaledToFill()
+                        .frame(width: 72, height: 72)
+                        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.s))
+                        .accessibilityLabel("参考图预览")
+                    VStack(alignment: .leading, spacing: DS.Space.xxs) {
+                        Text("参考图").font(.subheadline.weight(.semibold))
+                        if let referencePrepNote {
+                            Text(referencePrepNote).font(.footnote).foregroundStyle(.secondary)
+                        }
+                    }
+                    Spacer()
+                    Button {
+                        referenceImage = nil
+                        self.referenceThumbnail = nil
+                        referencePrepNote = nil
+                        referencePrepMs = 0
+                    } label: {
+                        Image(systemName: "xmark.circle").frame(width: 44, height: 44)
+                    }
+                    .accessibilityLabel("移除参考图")
+                    .disabled(isGenerating)
+                }
+            }
+            Menu {
+                Button {
+                    dismissKeyboard()
+                    showingRefPhotoPicker = true
+                } label: { Label("从相册选择参考图", systemImage: "photo.on.rectangle") }
+                Button {
+                    dismissKeyboard()
+                    showingRefFileImporter = true
+                } label: { Label("从文件导入参考图", systemImage: "folder") }
+            } label: {
+                Label(referenceImage == nil ? "添加参考图" : "更换参考图", systemImage: "photo.badge.plus")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(minHeight: 44)
+            }
+            .disabled(isGenerating)
+            .accessibilityIdentifier("ai.image.addReference")
+        }
+    }
 
-                // Aspect ratio glass pill (2:3 / 1:1 / 3:2 / 9:16)
+    private var imageParameters: some View {
+        AppSectionCard(title: "生成参数") {
+            VStack(alignment: .leading, spacing: 0) {
+                routeStatusBar
+                modelPicker
+                qualityPicker
                 Menu {
                     ForEach(AIImageTool.AspectRatio.allCases) { ratio in
                         Button {
                             Haptics.select()
                             aspectRatio = ratio
                         } label: {
-                            HStack {
-                                Text(aspectMenuLabel(ratio))
-                                if aspectRatio == ratio {
-                                    Image(systemName: "checkmark")
-                                }
-                            }
+                            Label(aspectMenuLabel(ratio), systemImage: aspectRatio == ratio ? "checkmark" : aspectIcon(ratio))
                         }
                     }
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: aspectIcon(aspectRatio))
-                            .font(.system(size: 11, weight: .semibold))
-                        Text(aspectRatio.displayLabel)
-                            .font(.caption.weight(.semibold))
-                            .lineLimit(1)
-                    }
-                    .foregroundStyle(.primary)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 7.5)
-                    .background(.ultraThinMaterial, in: Capsule())
-                    .overlay(Capsule().strokeBorder(Color.white.opacity(isDark ? 0.18 : 0.40), lineWidth: 0.8))
-                }
-                .tint(.primary)
-                .disabled(isGenerating)
+                } label: { parameterRow("画幅", value: aspectRatio.displayLabel) }
                 .accessibilityIdentifier("ai.image.aspect")
-
-                // Batch count glass pill (1张 / 2张 / 4张)
                 Menu {
                     ForEach([1, 2, 4], id: \.self) { count in
-                        Button {
+                        Button("\(count) 张") {
                             Haptics.select()
                             batchCount = count
-                        } label: {
-                            HStack {
-                                Text(count == 1 ? "1 张 · 极速省额度" : count == 2 ? "2 张 · 双图并发" : "4 张 · 四宫格并发")
-                                if batchCount == count {
-                                    Image(systemName: "checkmark")
-                                }
-                            }
                         }
                     }
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: batchCount == 1 ? "photo" : "square.grid.2x2")
-                            .font(.system(size: 11, weight: .semibold))
-                        Text("\(batchCount)张")
-                            .font(.caption.weight(.semibold))
-                            .lineLimit(1)
-                    }
-                    .foregroundStyle(.primary)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 7.5)
-                    .background(.ultraThinMaterial, in: Capsule())
-                    .overlay(Capsule().strokeBorder(Color.white.opacity(isDark ? 0.18 : 0.40), lineWidth: 0.8))
-                }
-                .tint(.primary)
-                .disabled(isGenerating)
+                } label: { parameterRow("张数", value: "\(batchCount) 张") }
                 .accessibilityIdentifier("ai.image.count")
-
-                Spacer(minLength: 2)
-
-                // Fine quality / sliders popover button (mirrors Grok's right-side sliders button)
+                Menu {
+                    ForEach(StudioStylePreset.allCases) { preset in
+                        Button {
+                            Haptics.select()
+                            selectedStyle = preset
+                        } label: {
+                            Label(preset.title, systemImage: selectedStyle == preset ? "checkmark" : preset.icon)
+                        }
+                    }
+                } label: { parameterRow("画风", value: selectedStyle.title) }
+                .accessibilityIdentifier("ai.image.styleMenu")
                 Menu {
                     Section("画质与速度档位") {
                         ForEach(AIImageTool.Quality.allCases) { q in
@@ -1559,333 +1277,93 @@ struct AIImageToolView: View {
                                 Haptics.select()
                                 quality = q
                             } label: {
-                                HStack {
-                                    Text(q.detailLabel)
-                                    if quality == q {
-                                        Image(systemName: "checkmark")
-                                    }
-                                }
+                                Label(q.detailLabel, systemImage: quality == q ? "checkmark" : "photo")
                             }
                         }
                     }
                     Section("画风预设") {
                         ForEach(StudioStylePreset.allCases) { preset in
-                            Button {
+                            Button(preset.title) {
                                 Haptics.select()
                                 selectedStyle = preset
-                            } label: {
-                                HStack {
-                                    Text(preset.title)
-                                    if selectedStyle == preset {
-                                        Image(systemName: "checkmark")
-                                    }
-                                }
                             }
                         }
                     }
                 } label: {
-                    Image(systemName: "slider.horizontal.3")
-                        .font(.system(size: 12.5, weight: .semibold))
-                        .foregroundStyle(.primary)
-                        .frame(width: 32, height: 32)
-                        .background(.ultraThinMaterial, in: Circle())
-                        .overlay(Circle().strokeBorder(Color.white.opacity(isDark ? 0.18 : 0.40), lineWidth: 0.8))
+                    Label("高级参数", systemImage: "slider.horizontal.3")
+                        .font(.subheadline)
+                        .frame(minHeight: 44)
                 }
-                .tint(.primary)
-                .disabled(isGenerating)
                 .accessibilityLabel("高级出图参数")
                 .accessibilityIdentifier("ai.image.settings")
             }
-
-            // Reference image preview strip + explicit T2I-only refusal guard (zero silent downgrade!)
-            if let refThumb = referenceThumbnail {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 10) {
-                        Image(uiImage: refThumb)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 44, height: 44)
-                            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("已附参考图（图生图 / 编辑模式）")
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(.primary)
-                            if let note = referencePrepNote {
-                                Text(note)
-                                    .font(.caption2.monospacedDigit())
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
-                        }
-                        Spacer()
-                        Button("更换") {
-                            showingRefPhotoPicker = true
-                        }
-                        .font(.caption2.weight(.semibold))
-                        .buttonStyle(.bordered)
-                        .controlSize(.mini)
-                        Button {
-                            referenceImage = nil
-                            referenceThumbnail = nil
-                            referencePrepNote = nil
-                            referencePrepMs = 0
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("移除参考图")
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 7)
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-
-                    if !activeSupportsReferenceImage {
-                        HStack(spacing: 8) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundStyle(.orange)
-                                .font(.caption)
-                            Text("当前模型仅支持纯文生图，不支持参考图（绝不悄悄降级）")
-                                .font(.caption2.weight(.semibold))
-                                .foregroundStyle(.orange)
-                                .fixedSize(horizontal: false, vertical: true)
-                            Spacer()
-                            Button("切换支持模型") {
-                                switchToReferenceCapableModel()
-                            }
-                            .font(.caption2.weight(.bold))
-                            .buttonStyle(.borderedProminent)
-                            .tint(.orange)
-                            .controlSize(.mini)
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 7)
-                        .background(Color.orange.opacity(0.14), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-                        .accessibilityIdentifier("ai.image.refUnsupportedBanner")
-                    }
-                }
+            .buttonStyle(.plain)
+            .disabled(isGenerating)
+            if useManagedGateway {
+                Text(wmStore.isBillingExempt ? "内置通道 · 免扣费" : wmStore.managedBalanceYuan.map { String(format: "内置余额 ¥%.2f", $0) } ?? "内置余额尚未同步")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
-
-            // Row 2: Frosted-Glass Prompt Composer Card (mirrors Grok IMG_4203 & ChatGPT composer!)
-            VStack(spacing: 8) {
-                TextField(referenceImage != nil ? "描述如何基于参考图修改或重绘…" : "输入即见所想…", text: $sessionStore.prompt, axis: .vertical)
-                    .font(.body)
-                    .lineLimit(1...4)
-                    .focused($promptFocused)
-                    .disabled(isGenerating)
-                    .submitLabel(.send)
-                    .onSubmit {
-                        handleGenerateTap()
-                    }
-                    .padding(.horizontal, 4)
-                    .padding(.top, 2)
-                    .accessibilityIdentifier("ai.image.prompt")
-
-                HStack(spacing: 8) {
-                    // + Style preset menu button
-                    Menu {
-                        Section("选择画面风格") {
-                            ForEach(StudioStylePreset.allCases) { preset in
-                                Button {
-                                    Haptics.select()
-                                    selectedStyle = preset
-                                } label: {
-                                    Label(preset.title, systemImage: preset.icon)
-                                }
-                            }
-                        }
-                    } label: {
-                        Image(systemName: "plus")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(.primary)
-                            .frame(width: 32, height: 32)
-                            .background(Color.primary.opacity(isDark ? 0.12 : 0.08), in: Circle())
-                    }
-                    .tint(.primary)
-                    .disabled(isGenerating)
-                    .accessibilityLabel("选择画风预设")
-                    .accessibilityIdentifier("ai.image.styleMenu")
-
-                    // Reference-image upload button (PhotosPicker + FileImporter)
-                    Menu {
-                        Button {
-                            dismissKeyboard()
-                            showingRefPhotoPicker = true
-                        } label: {
-                            Label("从相册选择参考图", systemImage: "photo.on.rectangle")
-                        }
-                        Button {
-                            dismissKeyboard()
-                            showingRefFileImporter = true
-                        } label: {
-                            Label("从文件导入参考图", systemImage: "folder")
-                        }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: referenceImage != nil ? "photo.badge.checkmark.fill" : "photo.badge.plus")
-                                .font(.system(size: 11.5, weight: .semibold))
-                            Text(referenceImage != nil ? "已选参考图" : "添加参考图")
-                                .font(.caption.weight(.semibold))
-                                .lineLimit(1)
-                        }
-                        .foregroundStyle(referenceImage != nil ? .white : .primary)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(
-                            referenceImage != nil ? providerAccent : Color.primary.opacity(isDark ? 0.12 : 0.08),
-                            in: Capsule()
-                        )
-                    }
-                    .tint(.primary)
-                    .disabled(isGenerating)
-                    .accessibilityIdentifier("ai.image.addReference")
-
-                    if selectedStyle != .none {
-                        Button {
-                            Haptics.tap()
-                            selectedStyle = .none
-                        } label: {
-                            HStack(spacing: 4) {
-                                Image(systemName: selectedStyle.icon)
-                                    .font(.system(size: 10.5, weight: .semibold))
-                                Text(selectedStyle.title)
-                                    .font(.caption.weight(.semibold))
-                                    .lineLimit(1)
-                                Image(systemName: "xmark")
-                                    .font(.system(size: 9, weight: .bold))
-                            }
-                            .foregroundStyle(isDark ? .black : .white)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(isDark ? Color.white : Color.primary, in: Capsule())
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    Spacer(minLength: 4)
-
-                    if promptFocused && !isGenerating {
-                        Button {
-                            Haptics.tap()
-                            dismissKeyboard()
-                        } label: {
-                            Image(systemName: "keyboard.chevron.compact.down")
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(.secondary)
-                                .frame(width: 32, height: 32)
-                                .background(Color.primary.opacity(isDark ? 0.12 : 0.08), in: Circle())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("收起键盘")
-                        .accessibilityIdentifier("ai.image.dismissKeyboard")
-                    }
-
-                    // Circular Generate ↑ / Stop ■ button
-                    Button {
-                        if isGenerating {
-                            Haptics.warning()
-                            stopGeneration()
-                        } else {
-                            handleGenerateTap()
-                        }
-                    } label: {
-                        Group {
-                            if isGenerating {
-                                Image(systemName: "stop.fill")
-                                    .font(.system(size: 12, weight: .bold))
-                                    .foregroundStyle(.white)
-                                    .frame(width: 34, height: 34)
-                                    .background(DS.Palette.danger, in: Circle())
-                            } else {
-                                Image(systemName: "arrow.up")
-                                    .font(.system(size: 15, weight: .bold))
-                                    .foregroundStyle(
-                                        isPromptValid
-                                            ? (isDark ? Color.black : Color.white)
-                                            : Color.secondary
-                                    )
-                                    .frame(width: 34, height: 34)
-                                    .background(
-                                        isPromptValid
-                                            ? (isDark ? Color.white : Color.black)
-                                            : Color.primary.opacity(isDark ? 0.14 : 0.09),
-                                        in: Circle()
-                                    )
-                            }
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!isGenerating && !isPromptValid)
-                    .accessibilityLabel(isGenerating ? "停止生成" : "生成图片")
-                    .accessibilityIdentifier("ai.image.generate")
-                }
+            if !isReadyToGenerate {
+                Divider()
+                availabilityBanner
+            } else if case .ready(_, _, let detail, _, _) = availabilityState {
+                Text(detail).font(.footnote).foregroundStyle(.secondary)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .strokeBorder(Color.white.opacity(isDark ? 0.20 : 0.55), lineWidth: 0.9)
-            )
-            .shadow(color: .black.opacity(isDark ? 0.42 : 0.10), radius: 16, y: 6)
         }
-        .padding(.horizontal, 12)
-        .padding(.top, 8)
-        .padding(.bottom, 8)
-        .frame(maxWidth: 820)
-        .frame(maxWidth: .infinity)
-        .background(
-            LinearGradient(
-                colors: [canvasBackground.opacity(0), canvasBackground.opacity(0.88), canvasBackground],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea(edges: .bottom)
-            .allowsHitTesting(false)
-        )
     }
 
-    /// Explicit user-selectable speed/quality tiers: never silently swaps model or lowers quality!
-    private var speedToggleCapsule: some View {
-        HStack(spacing: 2) {
-            speedSegmentButton(title: "快速草稿", target: .fast, active: quality == .fast)
-            speedSegmentButton(
-                title: quality == .balanced ? "均衡" : "高清成品",
-                target: .hd,
-                active: quality != .fast
-            )
+    private func parameterRow(_ title: String, value: String) -> some View {
+        LabeledContent {
+            HStack(spacing: DS.Space.xs) {
+                Text(value)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption)
+                    .accessibilityHidden(true)
+            }
+        } label: { Text(title) }
+        .font(.subheadline)
+        .frame(minHeight: 44)
+        .contentShape(Rectangle())
+    }
+
+    private var qualityPicker: some View {
+        Menu {
+            ForEach(AIImageTool.Quality.allCases) { tier in
+                Button {
+                    Haptics.select()
+                    quality = tier
+                } label: {
+                    Label(tier.detailLabel, systemImage: quality == tier ? "checkmark" : "camera.aperture")
+                }
+            }
+        } label: {
+            parameterRow("画质", value: quality == .fast ? "快速草稿" : quality == .hd ? "高清成品" : "均衡")
         }
-        .padding(3)
-        .background(.ultraThinMaterial, in: Capsule())
-        .overlay(Capsule().strokeBorder(Color.white.opacity(isDark ? 0.18 : 0.40), lineWidth: 0.8))
         .accessibilityIdentifier("ai.image.speed")
     }
 
-    private func speedSegmentButton(title: String, target: AIImageTool.Quality, active: Bool) -> some View {
-        Button {
-            Haptics.select()
-            withAnimation(.spring(response: 0.24, dampingFraction: 0.85)) {
-                quality = target
+    private var generateBar: some View {
+        HStack(spacing: DS.Space.s) {
+            if promptFocused {
+                Button { dismissKeyboard() } label: {
+                    Image(systemName: "keyboard.chevron.compact.down").frame(width: 44, height: 44)
+                }
+                .accessibilityLabel("收起键盘")
+                .accessibilityIdentifier("ai.image.dismissKeyboard")
             }
-        } label: {
-            Text(title)
-                .font(.caption.weight(.bold))
-                .foregroundStyle(
-                    active
-                        ? (isDark ? Color.black : Color.white)
-                        : Color.secondary
-                )
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(
-                    active
-                        ? (isDark ? Color.white : Color.black)
-                        : Color.clear,
-                    in: Capsule()
-                )
+            AppPrimaryCTA(title: isGenerating ? "停止生成" : "生成图片",
+                          icon: isGenerating ? "stop.fill" : "photo", tint: isGenerating ? DS.Palette.danger : DS.Palette.accent,
+                          isDisabled: !isGenerating && !isPromptValid) {
+                if isGenerating { stopGeneration() } else { handleGenerateTap() }
+            }
+            .accessibilityIdentifier("ai.image.generate")
         }
-        .buttonStyle(.plain)
-        .disabled(isGenerating)
+        .padding(.horizontal, DS.Space.m)
+        .padding(.vertical, DS.Space.xs)
+        .frame(maxWidth: DS.readableWidth)
+        .frame(maxWidth: .infinity)
+        .background(.bar)
     }
 
     // MARK: - Reference Image Preparation (Smart Downscale <= 1536px before upload!)
@@ -2688,6 +2166,7 @@ private struct StudioShimmerCard: View {
             }
         }
         .onAppear {
+            guard !UIAccessibility.isReduceMotionEnabled else { return }
             withAnimation(.linear(duration: 1.45).repeatForever(autoreverses: false)) {
                 shimmerPhase = 1.2
             }
@@ -2708,6 +2187,7 @@ private struct ImageStudioLightbox: View {
     let onCopied: () -> Void
     let onSaved: (Bool) -> Void
 
+    @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.dismiss) private var dismiss
     @State private var scale: CGFloat = 1.0
     @State private var steadyScale: CGFloat = 1.0
@@ -2740,91 +2220,83 @@ private struct ImageStudioLightbox: View {
                         }
                     }
                 }
-                .padding(.vertical, 64)
-
-            // Top translucent header
-            VStack {
-                HStack(spacing: 10) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 15, weight: .bold))
-                            .foregroundStyle(.white)
-                            .frame(width: 36, height: 36)
-                            .background(.ultraThinMaterial, in: Circle())
-                    }
-                    .accessibilityLabel("关闭预览")
-
-                    Spacer()
-
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text("\(modelName) · \(quality.shortLabel)")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.white)
-                        if let pixelSize {
-                            let timePart = elapsedSeconds.map { String(format: " · %.1fs", $0) } ?? ""
-                            Text("\(Int(pixelSize.width))×\(Int(pixelSize.height))\(timePart)")
-                                .font(.caption2.monospacedDigit())
-                                .foregroundStyle(.white.opacity(0.75))
+                .accessibilityLabel("生成图片")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    HStack(spacing: DS.Space.s) {
+                        Button { dismiss() } label: {
+                            Image(systemName: "xmark")
+                                .font(.headline)
+                                .frame(width: 44, height: 44)
                         }
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(.ultraThinMaterial, in: Capsule())
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 12)
+                        .accessibilityLabel("关闭预览")
+                        Spacer()
 
-                Spacer()
-
-                // Bottom prompt caption + 4-button studio action bar
-                VStack(spacing: 12) {
-                    Text(prompt)
-                        .font(.footnote)
-                        .foregroundStyle(.white.opacity(0.92))
-                        .lineLimit(3)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 9)
-                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-
-                    HStack(spacing: 8) {
-                        lightboxButton(title: "存相册", icon: "square.and.arrow.down") {
-                            Haptics.tap()
-                            PhotoAlbumSaver.save(image, completion: onSaved)
-                        }
-
-                        let shareImg = Image(uiImage: image)
-                        ShareLink(item: shareImg, preview: SharePreview(prompt, image: shareImg)) {
-                            VStack(spacing: 4) {
-                                Image(systemName: "square.and.arrow.up")
-                                    .font(.system(size: 15, weight: .semibold))
-                                Text("分享")
-                                    .font(.caption2.weight(.semibold))
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text("\(modelName) · \(quality.shortLabel)")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.white)
+                            if let pixelSize {
+                                let timePart = elapsedSeconds.map { String(format: " · %.1fs", $0) } ?? ""
+                                Text("\(Int(pixelSize.width))×\(Int(pixelSize.height))\(timePart)")
+                                    .font(.caption2.monospacedDigit())
+                                    .foregroundStyle(.white.opacity(0.75))
                             }
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        }
-
-                        lightboxButton(title: "提高质量", icon: "sparkles") {
-                            Haptics.tap()
-                            onUpscale()
-                        }
-
-                        lightboxButton(title: "复制词", icon: "doc.on.doc") {
-                            Haptics.tap()
-                            UIPasteboard.general.string = prompt
-                            onCopied()
                         }
                     }
+                    .padding(.horizontal, DS.Space.m)
+                    .background(.bar)
                 }
-                .padding(.horizontal, 14)
-                .padding(.bottom, 16)
-            }
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    VStack(spacing: DS.Space.xs) {
+                        Text(prompt)
+                            .font(.footnote)
+                            .foregroundStyle(.white.opacity(0.92))
+                            .lineLimit(3)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 9)
+                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: typeSize.isAccessibilitySize ? 130 : 67), spacing: DS.Space.xs)], spacing: DS.Space.xs) {
+                            lightboxButton(title: "存相册", icon: "square.and.arrow.down") {
+                                Haptics.tap()
+                                PhotoAlbumSaver.save(image, completion: onSaved)
+                            }
+
+                            let shareImg = Image(uiImage: image)
+                            ShareLink(item: shareImg, preview: SharePreview(prompt, image: shareImg)) {
+                                VStack(spacing: 4) {
+                                    Image(systemName: "square.and.arrow.up")
+                                        .font(.headline)
+                                    Text("分享")
+                                        .font(.caption.weight(.semibold))
+                                }
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity, minHeight: 44)
+                                .padding(.vertical, DS.Space.xxs)
+                                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            }
+
+                            lightboxButton(title: "提高质量", icon: "sparkles") {
+                                Haptics.tap()
+                                onUpscale()
+                            }
+
+                            lightboxButton(title: "复制提示词", icon: "doc.on.doc") {
+                                Haptics.tap()
+                                UIPasteboard.general.string = prompt
+                                onCopied()
+                            }
+                        }
+                    }
+                    .padding(.horizontal, DS.Space.m)
+                    .padding(.vertical, DS.Space.xs)
+                    .background(.bar)
+                }
         }
+        .foregroundStyle(.white)
         .preferredColorScheme(.dark)
     }
 
@@ -2832,13 +2304,13 @@ private struct ImageStudioLightbox: View {
         Button(action: action) {
             VStack(spacing: 4) {
                 Image(systemName: icon)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.headline)
                 Text(title)
-                    .font(.caption2.weight(.semibold))
+                    .font(.caption.weight(.semibold))
             }
             .foregroundStyle(.white)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .padding(.vertical, DS.Space.xxs)
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .buttonStyle(.plain)
