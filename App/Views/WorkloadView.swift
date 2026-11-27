@@ -57,6 +57,7 @@ struct WorkloadView: View {
 
     var body: some View {
         let report = store.workload(year: year, month: month)
+        let matches = people(report)
         List {
             if !ChinaHolidays.knownYears.contains(year) {
                 Label("App 里还没有 \(year) 年的法定节假日，假期会被当成工作日算，请更新 App", systemImage: "exclamationmark.triangle")
@@ -66,11 +67,9 @@ struct WorkloadView: View {
             Section {
                 PeriodPager(caption: "\(year)年", title: "\(month)月", back: { move(-1) }, forward: { move(1) })
                 if let first = report.days.first, let last = report.days.last {
-                    HStack(spacing: DS.Space.xs) {
-                        Chip(text: "\(report.days.count) 天", color: .secondary, icon: "calendar")
-                        Chip(text: "\(first.month)/\(first.day) – \(last.month)/\(last.day)", color: .secondary)
-                        Chip(text: "\(report.people.count) 人", color: .secondary, icon: "person.2")
-                    }
+                    Text("\(first.month)/\(first.day) – \(last.month)/\(last.day) · \(report.days.count) 天 · \(report.people.count) 人")
+                        .font(DS.Font.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
                 }
                 if !report.people.isEmpty {
                     WorkloadBarChart(items: report.people.prefix(12).map {
@@ -80,11 +79,13 @@ struct WorkloadView: View {
                     .padding(.vertical, DS.Space.xs)
                 }
             } footer: {
-                if report.days.isEmpty {
-                    Text("这个月还没有全员排班数据。")
-                } else {
+                if !report.days.isEmpty {
                     ExpandableText(text: "只算到今天，网站上能看到的日子才算得进来。「工作量」= 值班（遥测）+ 日常（各组、调度等岗位）+ 出差；假期里值完遥测的第二天休息算上班、算节假日上班，不算工作量。工作日网站上没排岗位、也没写休息的日子：除了调度，不管轮不轮组别都是正常上班，算日常、算工作量。写了休息、调休、请假的不管节假日还是平时都算休息；调度没排班的日子既不算工作量也不算上班。「节假日放假」是法定假日里网站上没排任何岗位的天数；「节假日上班」是法定假日里上了班（值班、各组、调度）的天数，两个数分开算；调休上班的周末算工作日。点开某个人可以看每一天怎么算的。")
                 }
+            }
+            if report.days.isEmpty {
+                AppEmptyStateCard(icon: "calendar", title: "本月暂无已读取的排班", message: "可切换月份或读取历史排班。")
+                    .listRowBackground(Color.clear)
             }
             GroupAttendanceSection(people: report.people)
             Section {
@@ -168,7 +169,11 @@ struct WorkloadView: View {
                     }
                 }
             }
-            ForEach(people(report), id: \.name) { person in
+            if !report.people.isEmpty && matches.isEmpty {
+                AppEmptyStateCard(icon: "magnifyingglass", title: "没有找到匹配的成员", message: "请更换搜索姓名。")
+                    .listRowBackground(Color.clear)
+            }
+            ForEach(matches, id: \.name) { person in
                 Section {
                     NavigationLink {
                         WorkloadDetailView(name: person.name, days: report.days)

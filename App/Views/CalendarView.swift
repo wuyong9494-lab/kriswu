@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 
 struct CalendarView: View {
     @EnvironmentObject private var store: AppStore
+    @Environment(\.dynamicTypeSize) private var typeSize
     @State private var year = DayKey.today.year
     @State private var month = DayKey.today.month
     @State private var editing: DayKey?
@@ -21,29 +22,52 @@ struct CalendarView: View {
                 LazyVStack(spacing: 14) {
                     header
                     VStack(spacing: DS.Space.xs) {
-                        LazyVGrid(columns: columns, spacing: DS.Space.xxs) {
-                            ForEach(weekdays, id: \.self) { w in
-                                Text(w).font(.caption).foregroundStyle(.secondary)
-                            }
-                            ForEach(0..<leadingBlanks, id: \.self) { i in
-                                Color.clear.frame(height: 64).id("blank-\(i)")
-                            }
-                            ForEach(days) { day in
-                                // 按钮（读屏会说「按钮」，也有按下效果）
-                                Button { Haptics.tap(); editing = day } label: {
-                                    DayCell(day: day, isToday: day == DayKey.today)
+                        if typeSize.isAccessibilitySize {
+                            let monthDays = days
+                            ForEach(monthDays) { day in
+                                Button {
+                                    Haptics.tap()
+                                    editing = day
+                                } label: {
+                                    VStack(alignment: .leading, spacing: DS.Space.xxs) {
+                                        Text("\(day.dateText) · \(day.weekdayText)").font(DS.Font.headline)
+                                        Text(ShiftDisplay(raw: store.shift(on: day), matcher: store.matcher)?.name
+                                             ?? (store.isCovered(day) ? "未排班" : "暂无数据"))
+                                            .font(DS.Font.body)
+                                            .foregroundStyle(.secondary)
+                                        if store.settings.dayMemos[day.description] != nil {
+                                            Label("有备注", systemImage: "note.text").font(DS.Font.caption)
+                                        }
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.vertical, DS.Space.xs)
+                                    .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.plain)
+                                .accessibilityIdentifier("calendar.day.\(day.description)")
+                                if day != monthDays.last { Divider() }
                             }
+                        } else {
+                            LazyVGrid(columns: columns, spacing: DS.Space.xxs) {
+                                ForEach(weekdays, id: \.self) { w in
+                                    Text(w).font(.caption).foregroundStyle(.secondary)
+                                }
+                                ForEach(0..<leadingBlanks, id: \.self) { i in
+                                    Color.clear.frame(height: 64).id("blank-\(i)")
+                                }
+                                ForEach(days) { day in
+                                    // 按钮（读屏会说「按钮」，也有按下效果）
+                                    Button { Haptics.tap(); editing = day } label: {
+                                        DayCell(day: day, isToday: day == DayKey.today)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                            Text("圆点表示已发布且未排班。")
+                                .font(DS.Font.caption)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        // 格子里只有我的班；小点是什么、同事的安排在哪看
-                        HStack(spacing: 4) {
-                            Image(systemName: "hand.tap")
-                            Text("格子里是你自己的班，小点是那天没给你排。点一天看全员分工、谁值遥测")
-                        }
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .card(padding: DS.Space.s)
                     .id("\(year)-\(month)")
@@ -51,7 +75,9 @@ struct CalendarView: View {
                                             removal: .opacity))
                     MonthSummary(days: days)
                 }
-                .padding()
+                .padding(DS.Space.m)
+                .frame(maxWidth: DS.readableWidth)
+                .frame(maxWidth: .infinity)
             }
             .appBackground()
             .simultaneousGesture(DragGesture(minimumDistance: 30).onEnded { value in
@@ -151,13 +177,13 @@ struct CalendarView: View {
                 .clipShape(Capsule())
             }
             Button { Haptics.tap(); move(-1) } label: {
-                Image(systemName: "chevron.left").font(.headline).frame(width: 40, height: 40)
+                Image(systemName: "chevron.left").font(.headline).frame(width: 44, height: 44)
                     .background(DS.Palette.cardSurface, in: Circle())
                     .overlay(Circle().strokeBorder(DS.Palette.hairline, lineWidth: 1))
             }
             .accessibilityLabel("上个月")
             Button { Haptics.tap(); move(1) } label: {
-                Image(systemName: "chevron.right").font(.headline).frame(width: 40, height: 40)
+                Image(systemName: "chevron.right").font(.headline).frame(width: 44, height: 44)
                     .background(DS.Palette.cardSurface, in: Circle())
                     .overlay(Circle().strokeBorder(DS.Palette.hairline, lineWidth: 1))
             }

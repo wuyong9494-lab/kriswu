@@ -121,6 +121,7 @@ struct TodayView: View {
                     } label: {
                         Label("发计划", systemImage: "paperplane")
                     }
+                    .accessibilityIdentifier("today.toolbar.plan")
                     NavigationLink {
                         DayRosterView()
                     } label: {
@@ -223,8 +224,7 @@ struct TodayHero: View {
             VStack(alignment: .leading, spacing: DS.Space.xxs) {
                 Text(display?.name ?? (store.isCovered(day) ? "未排班" : "暂无数据"))
                     .font(DS.Font.hero)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.5)
+                    .fixedSize(horizontal: false, vertical: true)
                 if isDuty {
                     Text("值班到明天 \(store.settings.dutyStart.text)").font(DS.Font.callout).opacity(0.9)
                 }
@@ -278,22 +278,7 @@ struct TodayHero: View {
         .foregroundStyle(.white)
         .padding(DS.Space.l)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            let shape = RoundedRectangle(cornerRadius: DS.Radius.xxl, style: .continuous)
-            shape.fill(Theme.gradient(color))
-                // 顶边高光 + 底部一点暗，像一块有厚度的玻璃
-                .overlay(shape.strokeBorder(LinearGradient(colors: [Color.white.opacity(0.45), Color.white.opacity(0.05)],
-                                                            startPoint: .top, endPoint: .bottom), lineWidth: 1))
-                // 右下角一个很淡的大图标水印，不抢文字
-                .overlay(alignment: .bottomTrailing) {
-                    Image(systemName: display?.symbol ?? "calendar")
-                        .font(.system(size: 108, weight: .bold))
-                        .foregroundStyle(Color.white.opacity(0.07))
-                        .offset(x: 18, y: 26)
-                }
-                .clipShape(shape)
-        }
-        .shadow(color: color.opacity(0.24), radius: 10, x: 0, y: 4)
+        .background(Theme.gradient(color), in: RoundedRectangle(cornerRadius: DS.Radius.xl, style: .continuous))
         .contentShape(Rectangle())
     }
 }
@@ -826,7 +811,8 @@ struct ManagerHomeView: View {
     var onReturnHome: (() -> Void)? = nil
     @EnvironmentObject private var store: AppStore
     @State private var searching = false
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: DS.Space.xs), count: 4)
+    @ScaledMetric(relativeTo: .caption) private var tileWidth: CGFloat = 74
+    private var columns: [GridItem] { [GridItem(.adaptive(minimum: tileWidth), spacing: DS.Space.xs)] }
 
     var body: some View {
         NavigationStack {
@@ -937,7 +923,7 @@ struct ManagerHomeView: View {
     private func label(_ title: String, _ icon: String) -> some View {
         VStack(spacing: DS.Space.xxs + 2) {
             IconBadge(icon: icon, size: 40)
-            Text(title).font(DS.Font.caption).foregroundStyle(.primary).lineLimit(1).minimumScaleFactor(0.8)
+            Text(title).font(DS.Font.caption).foregroundStyle(.primary).fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity)
     }

@@ -8,6 +8,7 @@ struct DutyWorkbenchCard: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.scenePhase) private var scenePhase
     @State private var notificationStatus: UNAuthorizationStatus?
+    @Environment(\.dynamicTypeSize) private var typeSize
     let now: Date
 
     private func telemetryNames(on day: DayKey) -> String? {
@@ -51,8 +52,7 @@ struct DutyWorkbenchCard: View {
                     }
                     Spacer(minLength: 0)
                 }
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+                .fixedSize(horizontal: false, vertical: true)
             }
 
             if let active {
@@ -66,7 +66,8 @@ struct DutyWorkbenchCard: View {
             }
 
             // Primary + secondary quick action pills on one clean row
-            HStack(spacing: DS.Space.xs) {
+            let actions = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: DS.Space.xs)) : AnyLayout(HStackLayout(spacing: DS.Space.xs))
+            actions {
                 if let handoff, canPrepareHandoff {
                     NavigationLink {
                         DutyHandoffView(window: handoff, personScope: store.myRosterName ?? store.settings.aliases.first ?? "")
@@ -165,7 +166,7 @@ struct DutyWorkbenchCard: View {
                 .foregroundStyle(DS.Palette.accent)
                 .accessibilityHidden(true)
             Text(title).font(.caption).foregroundStyle(.secondary)
-            Text(value).font(.subheadline.weight(.medium)).foregroundStyle(.primary).lineLimit(1)
+            Text(value).font(.subheadline.weight(.medium)).foregroundStyle(.primary).fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
         }
         .accessibilityElement(children: .combine)

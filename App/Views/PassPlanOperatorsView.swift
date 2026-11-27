@@ -35,7 +35,7 @@ struct PassPlanOperatorsView: View {
                     AppEmptyStateCard(
                         icon: "antenna.radiowaves.left.and.right",
                         title: "还没有配置地面站 / 运营商",
-                        message: "点右上角「添加」或下方按钮新增地面站规则；排列顺序即「按顺序依次发送」的先后顺序。",
+                        message: "添加第一条规则以设置站名匹配和发送顺序。",
                         actionTitle: "添加地面站 / 运营商",
                         action: { openEditor(.add) }
                     )
@@ -67,7 +67,7 @@ struct PassPlanOperatorsView: View {
             } header: {
                 Text("地面站与运营商（共 \(store.settings.passPlanOperators.count) 项 · 按此顺序发送）")
             } footer: {
-                Text("点击任意条目即可编辑；先精确匹配完整地面站名，无精确匹配时按最长唯一前缀归类。点上下箭头或「排序」可随时调整发送顺序。")
+                Text("先匹配完整站名，再匹配最长的唯一前缀。排序决定发送顺序。")
             }
 
             Section {
@@ -206,10 +206,11 @@ struct PassPlanOperatorsView: View {
                     } label: {
                         Image(systemName: "chevron.up")
                             .font(.system(size: 11, weight: .bold))
-                            .frame(width: 24, height: 24)
-                            .background(DS.Palette.surfaceSunken, in: Circle())
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("上移\(rule.name)")
                     .disabled(i == 0)
 
                     Button {
@@ -217,10 +218,11 @@ struct PassPlanOperatorsView: View {
                     } label: {
                         Image(systemName: "chevron.down")
                             .font(.system(size: 11, weight: .bold))
-                            .frame(width: 24, height: 24)
-                            .background(DS.Palette.surfaceSunken, in: Circle())
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("下移\(rule.name)")
                     .disabled(i >= store.settings.passPlanOperators.count - 1)
                 }
                 .foregroundStyle(.secondary)
@@ -322,7 +324,7 @@ struct GroundStationRuleEditorView: View {
             } header: {
                 Text("地面站匹配规则")
             } footer: {
-                Text("需填写「名称」，并至少填写「前缀」或「完整地面站名」之一；保存后自动生效并保留现有调度顺序。")
+                Text("前缀和完整站名至少填写一项。")
             }
 
             if isEditing, let idx = editingIndex, store.settings.passPlanOperators.indices.contains(idx) {
@@ -339,12 +341,13 @@ struct GroundStationRuleEditorView: View {
                 }
             }
         }
+        .appList()
         .scrollDismissesKeyboard(.interactively)
         .hidesFloatingTabBar()
         .navigationTitle(isEditing ? "编辑地面站" : "添加地面站")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
+            ToolbarItem(placement: .navigationBarTrailing) {
                 AppSaveToolbarButton(
                     title: "保存",
                     isSaving: isSaving,

@@ -106,6 +106,7 @@ private struct CapturedPage: Identifiable {
 final class WebModel: NSObject, ObservableObject, WKNavigationDelegate {
     let webView: WKWebView
     @Published var isLoading = false
+    @Published private(set) var navigationFailed = false
     @Published var currentURL: String?
     /// 单页网站（#/mine → #/duty）换页不会触发加载回调，用 KVO 跟踪能不能后退、当前地址
     @Published var canGoBack = false
@@ -164,6 +165,7 @@ final class WebModel: NSObject, ObservableObject, WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
         isLoading = true
+        navigationFailed = false
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
@@ -186,10 +188,14 @@ final class WebModel: NSObject, ObservableObject, WKNavigationDelegate {
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        guard (error as NSError).code != NSURLErrorCancelled else { return }
+        navigationFailed = true
         isLoading = false
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        guard (error as NSError).code != NSURLErrorCancelled else { return }
+        navigationFailed = true
         isLoading = false
     }
 }

@@ -45,6 +45,7 @@ enum PassPlanShareItem {
 /// 支持 DeepSeek AI 或本机离线视觉识别、逐条手动修改识别错误，并按运营商对照表顺序一键依次发送。
 struct PassPlanView: View {
     @EnvironmentObject private var store: AppStore
+    @Environment(\.dynamicTypeSize) private var typeSize
     /// 打开时带进来的计划（分享过来的 Excel、截图演示）
     private let initial: PassPlan.Reading?
     /// 从快捷指令「拍数传计划」打开：直接进原相机拍照
@@ -276,7 +277,7 @@ struct PassPlanView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("数传计划识别")
                         .font(DS.Font.headline)
-                    Text(usingCloud ? "当前：DeepSeek AI 识别（复杂表格更准）" : "当前：本机离线识别（无需 API Key）")
+                    Text(usingCloud ? "DeepSeek 识别" : "本机离线识别")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -306,7 +307,8 @@ struct PassPlanView: View {
             }
 
             // 两大核心主按钮：原相机拍照 + 从相册选图
-            HStack(spacing: DS.Space.s) {
+            let captureLayout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(spacing: DS.Space.s)) : AnyLayout(HStackLayout(spacing: DS.Space.s))
+            captureLayout {
                 Button {
                     startCapture(useDocumentScanner: false)
                 } label: {
@@ -315,19 +317,10 @@ struct PassPlanView: View {
                             Image(systemName: "camera.fill")
                                 .font(.title3.weight(.semibold))
                             Spacer()
-                            Text("推荐")
-                                .font(.caption2.weight(.bold))
-                                .padding(.horizontal, 7)
-                                .padding(.vertical, 2)
-                                .background(Color.white.opacity(0.22), in: Capsule())
                         }
                         Text("原相机拍照")
                             .font(.headline.weight(.bold))
-                        Text("直接调用系统相机拍摄")
-                            .font(.caption)
-                            .opacity(0.88)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.85)
+
                     }
                     .foregroundStyle(.white)
                     .padding(DS.Space.s)
@@ -353,11 +346,7 @@ struct PassPlanView: View {
                         Text("从相册选图")
                             .font(.headline.weight(.bold))
                             .foregroundStyle(.primary)
-                        Text("选取已拍照片或截图")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.85)
+
                     }
                     .padding(DS.Space.s)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -373,7 +362,7 @@ struct PassPlanView: View {
             }
 
             // 辅助功能 2×2 轻量网格（文档扫描可选，不再强制）
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: DS.Space.xs), GridItem(.flexible(), spacing: DS.Space.xs)],
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: DS.Space.xs), count: typeSize.isAccessibilitySize ? 1 : 2),
                       spacing: DS.Space.xs) {
                 secondaryActionPill(title: "文档扫描", icon: "doc.viewfinder", tint: DS.Palette.info) {
                     startCapture(useDocumentScanner: true)
@@ -398,11 +387,10 @@ struct PassPlanView: View {
                         Image(systemName: "list.number")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(DS.Palette.accent)
-                        Text(rules.isEmpty ? "运营商对照表" : "运营商（\(rules.count)家）")
-                            .font(.caption.weight(.semibold))
+                        Text("地面站与运营商")
+                            .font(DS.Font.callout)
                             .foregroundStyle(.primary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.85)
+                            .fixedSize(horizontal: false, vertical: true)
                         Spacer(minLength: 0)
                         Image(systemName: "chevron.right")
                             .font(.caption2.weight(.semibold))

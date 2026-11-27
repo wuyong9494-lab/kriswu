@@ -4,7 +4,6 @@ import WebKit
 /// 「网站」标签页：直接显示值班网站的手机版，用保存的账号自动登录。网页上有的内容在这里都能看到。
 struct SiteView: View {
     @EnvironmentObject private var store: AppStore
-    @Environment(\.floatingTabBarTop) private var tabBarTop
     @StateObject private var model = WebModel()
     @State private var loaded = false
 
@@ -12,28 +11,26 @@ struct SiteView: View {
         NavigationStack {
             Group {
                 if store.settings.sourceURL.isEmpty {
-                    VStack(spacing: 12) {
-                        Image(systemName: "globe").font(.largeTitle).foregroundStyle(.secondary)
-                        Text("还没有设置值班网站").font(.headline)
-                        Text("到「设置 › 账号与同步」里登录值班网站，并点「设为同步地址」。")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
+                    AppEmptyStateCard(
+                        icon: "globe", title: "还没有设置值班网站",
+                        message: "在「设置 › 账号与同步」登录值班网站，再点「设为同步地址」。"
+                    )
+                    .padding(DS.Space.m)
+                    .frame(maxWidth: DS.readableWidth)
+                } else if model.navigationFailed {
+                    AppErrorBannerCard(message: "值班网站加载失败。请检查网络连接后重试。", retryTitle: "重新加载") {
+                        model.load(store.settings.sourceURL)
                     }
-                    .padding()
+                    .padding(DS.Space.m)
+                    .frame(maxWidth: DS.readableWidth)
                 } else {
-                    // 网页停在悬浮标签栏上面：网页自己底部的按钮不被挡住
-                    GeometryReader { g in
-                        let overlap = tabBarTop.isFinite ? max(0, g.frame(in: .global).maxY - tabBarTop + 4) : 0
-                        WebView(webView: model.webView)
-                            .padding(.bottom, overlap)
-                    }
+                    WebView(webView: model.webView)
                 }
             }
             .overlay(alignment: .top) {
-                if model.isLoading { ProgressView().padding(6) }
+                if model.isLoading { ProgressView("正在加载值班网站").padding(DS.Space.s) }
             }
-            .appList()
+            .appBackground()
             .navigationTitle("值班网站")
             .observeTabRootNavigationDepth(tabID: "site")
             .navigationBarTitleDisplayMode(.inline)

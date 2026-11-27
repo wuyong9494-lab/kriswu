@@ -28,7 +28,7 @@ struct DayRosterView: View {
                         } label: {
                             Image(systemName: "chevron.left")
                                 .font(.subheadline.weight(.bold))
-                                .frame(width: 36, height: 36)
+                                .frame(width: 44, height: 44)
                                 .background(DS.Palette.surfaceSunken, in: Circle())
                         }
                         .buttonStyle(.plain)
@@ -48,7 +48,7 @@ struct DayRosterView: View {
                         } label: {
                             Image(systemName: "chevron.right")
                                 .font(.subheadline.weight(.bold))
-                                .frame(width: 36, height: 36)
+                                .frame(width: 44, height: 44)
                                 .background(DS.Palette.surfaceSunken, in: Circle())
                         }
                         .buttonStyle(.plain)
@@ -87,14 +87,13 @@ struct DayRosterView: View {
                 .card()
 
                 if rows.isEmpty {
-                    EmptyState(
+                    AppEmptyStateCard(
                         icon: "tablecells",
                         title: store.roster.isEmpty ? "暂无全员排班数据" : "这一天暂无排班",
                         message: store.roster.isEmpty
-                            ? "同步时 App 会读取「值班查看」全员排班；回到「今天」页下拉刷新一次即可。"
+                            ? "同步时 App 会读取「值班查看」全员排班；在「今天」页下拉即可刷新。"
                             : "只能查看值班网站上已发布排班的日期，可左右滑切换其他日期。"
                     )
-                    .card()
                 } else {
                     ForEach(rows, id: \.post) { row in
                         let display = ShiftDisplay(raw: row.post, matcher: store.matcher)
