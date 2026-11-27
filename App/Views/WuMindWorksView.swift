@@ -72,22 +72,26 @@ struct WuMindWorksView: View {
             }
         }
         .sheet(item: $activeWork) { work in
+            let retry = initialFilter == nil || initialFilter == work.workType ? onRetryWork : nil
             WuMindWorkDetailSheet(
                 work: work,
-                onReopenPPT: { deck, workID in
-                    activeWork = nil
-                    if !isEmbedded { dismiss() }
-                    onReopenPPT?(deck, workID)
+                onReopenPPT: onReopenPPT.map { open in
+                    { deck, workID in
+                        closeForAction()
+                        open(deck, workID)
+                    }
                 },
-                onReopenScene3D: { json, workID in
-                    activeWork = nil
-                    if !isEmbedded { dismiss() }
-                    onReopenScene3D?(json, workID)
+                onReopenScene3D: onReopenScene3D.map { open in
+                    { json, workID in
+                        closeForAction()
+                        open(json, workID)
+                    }
                 },
-                onRetryWork: { failed in
-                    activeWork = nil
-                    if !isEmbedded { dismiss() }
-                    onRetryWork?(failed)
+                onRetryWork: retry.map { run in
+                    { failed in
+                        closeForAction()
+                        run(failed)
+                    }
                 }
             )
         }
@@ -95,6 +99,11 @@ struct WuMindWorksView: View {
             guard scenePhase == .active else { return }
             await refreshWorks()
         }
+    }
+
+    private func closeForAction() {
+        activeWork = nil
+        if !isEmbedded { dismiss() }
     }
 
     private func refreshWorks() async {
