@@ -1,7 +1,7 @@
 import XCTest
 
 final class DutyRecordNavigationTests: XCTestCase {
-    func testCreateEditAndReopenNoteFromWorkspace() {
+    func testCreateEditAndReopenNoteFromWorkspace() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-demo"]
@@ -49,11 +49,13 @@ final class DutyRecordNavigationTests: XCTestCase {
         XCTAssertEqual(detail.value as? String, initial)
         detail.tap()
         detail.typeText("Edited")
+        let revised = try XCTUnwrap(detail.value as? String)
+        XCTAssertTrue(revised.contains("Edited"))
+        XCTAssertEqual(revised.replacingOccurrences(of: "Edited", with: ""), initial)
         let detailSave = app.buttons["worklog.detail.save"]
         XCTAssertTrue(detailSave.isEnabled && detailSave.isHittable)
         detailSave.tap()
 
-        let revised = initial + "Edited"
         let updated = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", revised)).firstMatch
         XCTAssertTrue(updated.waitForExistence(timeout: 8))
         updated.tap()
