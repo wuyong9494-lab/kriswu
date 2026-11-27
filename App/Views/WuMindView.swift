@@ -1498,12 +1498,12 @@ struct WuMindWorkspaceView: View {
     }
 
     private var welcomeCanvas: some View {
-        VStack(spacing: DS.Space.l) {
-            Spacer(minLength: 26)
+        VStack(alignment: .leading, spacing: DS.Space.s) {
+            Spacer(minLength: DS.Space.l)
             Text(isTemporaryChat ? "临时聊天" : "今天想聊点什么？")
                 .font(DS.Font.display)
                 .foregroundStyle(.primary)
-                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
                 .accessibilityIdentifier("wumind.chat.greeting")
 
@@ -1521,9 +1521,10 @@ struct WuMindWorkspaceView: View {
                     }
                 }
             }
-            Spacer(minLength: 24)
+            Spacer(minLength: DS.Space.l)
         }
-        .padding(.horizontal, 6)
+        .padding(.horizontal, DS.Space.xs)
+        .frame(maxWidth: DS.readableWidth, alignment: .leading)
         .frame(maxWidth: .infinity)
     }
 
@@ -1532,23 +1533,20 @@ struct WuMindWorkspaceView: View {
             Haptics.tap()
             action()
         } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: DS.Space.xs) {
                 Image(systemName: icon)
                     .foregroundStyle(.secondary)
                 Text(title)
                     .foregroundStyle(.primary)
-                Spacer(minLength: 8)
-                Image(systemName: "arrow.up.left")
+                Image(systemName: "arrow.turn.down.left")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
             }
             .font(.subheadline)
-            .padding(.horizontal, 16)
-            .frame(minHeight: 52)
-            .background(elevatedSurface, in: RoundedRectangle(cornerRadius: 17))
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .frame(maxWidth: 350)
         .accessibilityIdentifier(id)
     }
 

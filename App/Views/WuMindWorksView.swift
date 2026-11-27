@@ -120,46 +120,56 @@ struct WuMindWorksView: View {
     }
 
     private var embeddedContent: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: DS.Space.s) {
+            HStack {
+                Text("作品")
+                    .font(DS.Font.display)
+                    .accessibilityAddTraits(.isHeader)
+                Spacer()
+                refreshButton
+                    .frame(minWidth: 44, minHeight: 44)
+            }
+            HStack(spacing: DS.Space.s) {
+                HStack(spacing: DS.Space.xs) {
                     Image(systemName: "magnifyingglass")
-                        .font(.caption)
                         .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
                     TextField("搜索标题、提示词或模型", text: $searchText)
-                        .font(.subheadline)
+                        .submitLabel(.search)
                     if !searchText.isEmpty {
-                        Button { searchText = "" } label: {
+                        Button {
+                            searchText = ""
+                        } label: {
                             Image(systemName: "xmark.circle.fill")
-                                .font(.caption)
                                 .foregroundStyle(.secondary)
+                                .frame(minWidth: 44, minHeight: 44)
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel("清除搜索")
                     }
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
-                .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-
-                refreshButton
-                    .frame(width: 44, height: 44)
-                    .background(Color(.tertiarySystemFill), in: Circle())
+                .padding(.horizontal, DS.Space.s)
+                .frame(minHeight: 46)
+                .background(DS.Palette.surfaceSunken, in: RoundedRectangle(cornerRadius: DS.Radius.m))
+                filterMenu
             }
-            .padding(.horizontal, 14)
-            .padding(.top, 8)
-            .padding(.bottom, 4)
-
             mainListContent
         }
+        .padding(.horizontal, DS.Space.m)
+        .padding(.top, DS.Space.m)
+        .frame(maxWidth: DS.readableWidth)
+        .frame(maxWidth: .infinity)
     }
 
     private var mainListContent: some View {
         VStack(spacing: 0) {
-            filterBar
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(Color(.secondarySystemGroupedBackground))
-
+            if !isEmbedded {
+                HStack {
+                    Spacer()
+                    filterMenu
+                }
+                .padding(.horizontal, DS.Space.m)
+            }
             if worksStore.pendingDeleteCount > 0 {
                 HStack(spacing: 8) {
                     Image(systemName: "icloud.slash")
@@ -200,12 +210,13 @@ struct WuMindWorksView: View {
                 emptyState
             } else {
                 ScrollView {
-                    LazyVStack(spacing: 12) {
+                    LazyVStack(spacing: 0) {
                         ForEach(filteredWorks) { work in
                             workCard(work)
                         }
                     }
-                    .padding(DS.Space.m)
+                    .padding(.horizontal, isEmbedded ? 0 : DS.Space.m)
+                    .padding(.vertical, DS.Space.s)
                     .frame(maxWidth: DS.readableWidth)
                     .frame(maxWidth: .infinity)
                 }
@@ -217,31 +228,25 @@ struct WuMindWorksView: View {
         .appBackground()
     }
 
-    private var filterBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                filterChip(title: "全部 (\(worksStore.works.count))", type: nil)
-                ForEach(WuMindWorkType.allCases) { t in
-                    let count = worksStore.works(of: t).count
-                    filterChip(title: "\(t.title) (\(count))", type: t)
+    private var filterMenu: some View {
+        Menu {
+            Picker("作品类型", selection: $selectedFilter) {
+                Text("全部 (\(worksStore.works.count))").tag(nil as WuMindWorkType?)
+                ForEach(WuMindWorkType.allCases) { type in
+                    Text("\(type.title) (\(worksStore.works(of: type).count))").tag(Optional(type))
                 }
             }
-        }
-    }
-
-    private func filterChip(title: String, type: WuMindWorkType?) -> some View {
-        let selected = selectedFilter == type
-        return Button {
-            selectedFilter = type
         } label: {
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(selected ? Color.accentColor : Color(.tertiarySystemFill), in: Capsule())
-                .foregroundStyle(selected ? .white : .primary)
+            HStack(spacing: DS.Space.xxs) {
+                Image(systemName: "line.3.horizontal.decrease")
+                Text(selectedFilter?.title ?? "全部")
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .font(.subheadline.weight(.medium))
+            .frame(minWidth: 44, minHeight: 44)
         }
-        .buttonStyle(.plain)
+        .accessibilityLabel("筛选作品，\(selectedFilter?.title ?? "全部")")
+        .accessibilityIdentifier("wumind.works.filter")
     }
 
     private var emptyState: some View {
@@ -261,31 +266,18 @@ struct WuMindWorksView: View {
             HStack(alignment: .top, spacing: 12) {
                 thumbnailBox(for: work)
                 VStack(alignment: .leading, spacing: 5) {
-                    HStack(spacing: 6) {
-                        Label(work.workType.title, systemImage: work.workType.iconName)
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                        if work.versionNumber > 1 {
-                            Text("v\(work.versionNumber)")
-                                .font(.caption2.weight(.bold))
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 1)
-                                .background(Color.indigo.opacity(0.15), in: Capsule())
-                                .foregroundStyle(.indigo)
-                        }
-                        if let sizeLabel = work.formattedAssetSize {
-                            Text(sizeLabel)
-                                .font(.caption2.monospacedDigit())
-                                .foregroundStyle(.tertiary)
-                        }
-                        Spacer()
+                    Text(work.title.isEmpty ? "未命名作品" : work.title)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: DS.Space.xs) {
+                        Text(work.workType.title)
+                        if work.versionNumber > 1 { Text("v\(work.versionNumber)") }
+                        if let sizeLabel = work.formattedAssetSize { Text(sizeLabel) }
                         statusBadge(for: work)
                     }
-
-                    Text(work.title.isEmpty ? "未命名作品" : work.title)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(2)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
 
                     if !work.modelID.isEmpty {
                         Text("模型：\(work.modelID)")
@@ -360,8 +352,10 @@ struct WuMindWorksView: View {
                     }
                 }
             }
-            .padding(12)
-            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14))
+            .padding(.vertical, DS.Space.m)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .overlay(alignment: .bottom) { Divider() }
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("wumind.works.open.\(work.id)")

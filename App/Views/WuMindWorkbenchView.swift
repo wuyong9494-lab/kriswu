@@ -57,34 +57,36 @@ struct WuMindWorkbenchView: View {
     private var failedCount: Int { worksStore.works.filter(\.isFailed).count }
 
     var body: some View {
-        VStack(spacing: 0) {
+        GeometryReader { geometry in
+            let wide = geometry.size.width >= 760 && !dynamicTypeSize.isAccessibilitySize
+            let columns = dynamicTypeSize.isAccessibilitySize || geometry.size.width < 340 ? 1 : 2
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: DS.Space.m) {
+                VStack(alignment: .leading, spacing: DS.Space.l) {
                     headerRow
-                    studiosGrid
-                    if toolQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        expandableRow("继续编辑", icon: "clock.arrow.circlepath",
-                                      id: "wumind.workbench.continue", expanded: $showPipelines)
-                        if showPipelines { multiStepPipelinesSection }
-                        if !worksStore.works.isEmpty {
-                            expandableRow(activeCount > 0 ? "任务 · \(activeCount) 项进行中" : "任务记录",
-                                          icon: "tray", id: "wumind.workbench.queue", expanded: $showQueue)
-                            if showQueue { taskQueueSection }
+                    searchBar
+                    if wide && searchTerm.isEmpty {
+                        HStack(alignment: .top, spacing: DS.Space.xl) {
+                            directory(columns: columns)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            Divider()
+                            activityAndManagement
+                                .frame(width: min(300, geometry.size.width * 0.3))
                         }
-                        expandableRow("空间与账户", icon: "slider.horizontal.3",
-                                      id: "wumind.workbench.manage", expanded: $showManagement)
-                        if showManagement { workspaceToolsRow }
+                    } else {
+                        directory(columns: columns)
+                        if searchTerm.isEmpty {
+                            activityAndManagement
+                        }
                     }
                 }
-                .padding(.horizontal, 18)
-                .padding(.top, 10)
-                .padding(.bottom, 16)
-                .frame(maxWidth: DS.readableWidth)
+                .padding(.horizontal, wide ? DS.Space.xl : DS.Space.m)
+                .padding(.vertical, DS.Space.m)
+                .frame(maxWidth: 1120)
                 .frame(maxWidth: .infinity)
             }
             .scrollDismissesKeyboard(.interactively)
             .refreshable { await worksStore.syncFromCloud() }
-            searchBar
+            .accessibilityIdentifier("wumind.workbench.scroll")
         }
         .sheet(item: $selectedDetailWork) { work in
             WuMindWorkDetailSheet(
@@ -151,14 +153,14 @@ struct WuMindWorkbenchView: View {
     private var headerRow: some View {
         HStack {
             Text("工作台")
-                .font(DS.Font.title)
+                .font(DS.Font.display)
                 .accessibilityAddTraits(.isHeader)
             Spacer()
             Button(action: onOpenSettings) {
                 Image(systemName: "gearshape")
                     .font(.system(size: 17, weight: .medium))
                     .frame(width: 44, height: 44)
-                    .background(elevatedSurface, in: Circle())
+
             }
             .buttonStyle(.plain)
             .accessibilityLabel("设置")
@@ -192,36 +194,33 @@ struct WuMindWorkbenchView: View {
                 .accessibilityIdentifier("wumind.workbench.clearSearch")
             }
         }
-        .padding(.leading, 15)
-        .padding(.trailing, 5)
-        .frame(minHeight: 48)
-        .background(elevatedSurface, in: Capsule())
-        .padding(.horizontal, 18)
-        .padding(.vertical, 8)
-        .frame(maxWidth: 660)
-        .frame(maxWidth: .infinity)
+        .padding(.horizontal, DS.Space.s)
+        .frame(minHeight: 46)
+        .background(DS.Palette.surfaceSunken, in: RoundedRectangle(cornerRadius: DS.Radius.m))
     }
 
-    private var studiosGrid: some View {
-        let query = toolQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        let matches = query.isEmpty ? studioEntries : (studioEntries + managementEntries).filter {
-            ($0.title + " " + $0.keywords).localizedCaseInsensitiveContains(query)
+    private var searchTerm: String {
+        toolQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func directory(columns: Int) -> some View {
+        let matches = searchTerm.isEmpty ? studioEntries : (studioEntries + managementEntries).filter {
+            ($0.title + " " + $0.keywords).localizedCaseInsensitiveContains(searchTerm)
         }
         return Group {
             if matches.isEmpty {
                 Text("没有匹配的工具")
-                    .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 88)
             } else {
-                studioGrid(matches)
+                studioGrid(matches, columns: columns)
             }
         }
     }
 
-    private func studioGrid(_ entries: [StudioEntry]) -> some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10),
-                                count: dynamicTypeSize.isAccessibilitySize ? 1 : 2), spacing: 10) {
+    private func studioGrid(_ entries: [StudioEntry], columns: Int) -> some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: DS.Space.m), count: columns),
+                  alignment: .leading, spacing: 0) {
             ForEach(entries) { entry in
                 Button {
                     Haptics.tap()
@@ -230,22 +229,42 @@ struct WuMindWorkbenchView: View {
                 } label: {
                     HStack(spacing: DS.Space.s) {
                         Image(systemName: entry.icon)
-                            .font(.body.weight(.medium))
+                            .font(.title3.weight(.regular))
                             .foregroundStyle(DS.Palette.iconPrimary)
-                            .frame(width: 22)
+                            .frame(width: 26)
                             .accessibilityHidden(true)
                         Text(entry.title)
-                            .font(DS.Font.callout)
+                            .font(.body.weight(.medium))
+                            .fixedSize(horizontal: false, vertical: true)
                             .foregroundStyle(.primary)
+                        Spacer(minLength: 0)
                     }
-                    .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
-                    .padding(.horizontal, DS.Space.s)
-                    .background(elevatedSurface, in: RoundedRectangle(cornerRadius: DS.Radius.m))
+                    .padding(.vertical, DS.Space.xs)
+                    .frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .overlay(alignment: .bottom) { Divider() }
                 .accessibilityIdentifier(entry.id)
             }
+        }
+    }
+
+    private var activityAndManagement: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            expandableRow("继续编辑", icon: "clock.arrow.circlepath",
+                          id: "wumind.workbench.continue", expanded: $showPipelines)
+            if showPipelines { multiStepPipelinesSection }
+            Divider()
+            if !worksStore.works.isEmpty {
+                expandableRow(activeCount > 0 ? "任务 · \(activeCount) 项进行中" : "任务记录",
+                              icon: "tray", id: "wumind.workbench.queue", expanded: $showQueue)
+                if showQueue { taskQueueSection }
+                Divider()
+            }
+            expandableRow("空间与账户", icon: "slider.horizontal.3",
+                          id: "wumind.workbench.manage", expanded: $showManagement)
+            if showManagement { studioGrid(managementEntries, columns: 1) }
         }
     }
 
@@ -265,8 +284,7 @@ struct WuMindWorkbenchView: View {
                     .font(.caption.weight(.semibold))
                     .accessibilityHidden(true)
             }
-            .padding(.horizontal, 13)
-            .frame(minHeight: 44)
+            .frame(minHeight: 52)
             .foregroundStyle(.secondary)
             .contentShape(Rectangle())
         }
@@ -278,131 +296,47 @@ struct WuMindWorkbenchView: View {
     // MARK: - Live Multi-Step Workflows (Real State from PPT & 3D Studios)
 
     private var multiStepPipelinesSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            // 1) PPT Multi-Step Pipeline
-            Button {
-                Haptics.tap()
-                onOpenTool(.ppt)
-            } label: {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "rectangle.on.rectangle.angled")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.orange)
-                        Text(pptStore.deck?.title ?? "汇报 PPT 多步流水线")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
-                        Spacer()
-                        if pptStore.generating {
-                            ProgressView().controlSize(.mini)
-                        } else {
-                            Text(pptStore.deck != nil ? "继续修改" : "开始")
-                                .font(.caption2.weight(.bold))
-                                .foregroundStyle(.orange)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 3)
-                                .background(Color.orange.opacity(0.13), in: Capsule())
-                        }
-                    }
-
-                    let step1Done = !pptStore.sourceAttachments.isEmpty || pptStore.rawExcelData != nil
-                    let step2Done = pptStore.deck != nil
-                    let step3Done = pptStore.lastSurgicalEditSummary != nil
-                    let step4Done = pptStore.exportedPPTXURL != nil
-                    HStack(spacing: 6) {
-                        pipelineStepChip("1.上传资料", done: step1Done)
-                        pipelineStepChip("2.生成大纲", done: step2Done)
-                        pipelineStepChip("3.单页精修", done: step3Done)
-                        pipelineStepChip("4.导出PPTX", done: step4Done)
-                    }
-
-                    if pptStore.generating && !pptStore.stageLabel.isEmpty {
-                        Text(pptStore.stageLabel)
-                            .font(.caption2)
-                            .foregroundStyle(.orange)
-                    } else if let deck = pptStore.deck {
-                        Text("已生成 \(deck.slides.count) 页 · \(pptStore.lastSurgicalEditSummary ?? "点进可局部修改任意单页并导出新版本")")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    } else {
-                        Text("上传 Word / Excel / Logo → 生成 10 页管理层汇报 → 修改指定页 → 导出可编辑 .pptx")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                }
-                .padding(13)
-                .background(elevatedSurface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(subtleBorder, lineWidth: 1))
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("wumind.workbench.pipeline.ppt")
-
-            // 2) 3D Blueprint & Parametric Editing Pipeline
-            Button {
-                Haptics.tap()
-                onOpenTool(.spatial3d)
-            } label: {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "cube.transparent")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.teal)
-                        Text(spatial3DStore.scene.title.isEmpty ? "3D 空间与图纸转场景" : spatial3DStore.scene.title)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
-                        Spacer()
-                        if spatial3DStore.isGenerating {
-                            ProgressView().controlSize(.mini)
-                        } else {
-                            Text("继续编辑")
-                                .font(.caption2.weight(.bold))
-                                .foregroundStyle(.teal)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 3)
-                                .background(Color.teal.opacity(0.13), in: Capsule())
-                        }
-                    }
-
-                    HStack(spacing: 6) {
-                        pipelineStepChip("1.图纸/文本", done: spatial3DStore.activeBlueprintDraft != nil || !spatial3DStore.scene.nodes.isEmpty)
-                        pipelineStepChip("2.生成场景", done: !spatial3DStore.scene.nodes.isEmpty)
-                        pipelineStepChip("3.门洞精修", done: spatial3DStore.sceneRevision > 0)
-                        pipelineStepChip("4.导出GLB", done: spatial3DStore.exportedGLBURL != nil)
-                    }
-
-                    Text(spatial3DStore.isGenerating
-                         ? spatial3DStore.generationStatus
-                         : "当前场景含 \(spatial3DStore.scene.nodes.count) 个可独立编辑构件 · 支持户型图纠偏与毫米级门洞同步")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-                .padding(13)
-                .background(elevatedSurface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(subtleBorder, lineWidth: 1))
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("wumind.workbench.pipeline.3d")
+        VStack(alignment: .leading, spacing: 0) {
+            let deck = pptStore.deck
+            documentRow(title: deck?.title ?? "新建幻灯片",
+                        detail: pptStore.generating ? pptStore.stageLabel : deck.map { "\($0.slides.count) 页" },
+                        icon: "rectangle.on.rectangle.angled",
+                        busy: pptStore.generating,
+                        action: { onOpenTool(.ppt) })
+                .accessibilityIdentifier("wumind.workbench.pipeline.ppt")
+            let scene = spatial3DStore.scene
+            documentRow(title: scene.title.isEmpty ? "3D 空间" : scene.title,
+                        detail: spatial3DStore.isGenerating ? spatial3DStore.generationStatus : "\(scene.nodes.count) 个构件",
+                        icon: "cube",
+                        busy: spatial3DStore.isGenerating,
+                        action: { onOpenTool(.spatial3d) })
+                .accessibilityIdentifier("wumind.workbench.pipeline.3d")
         }
+        .padding(.bottom, DS.Space.s)
     }
 
-    private func pipelineStepChip(_ title: String, done: Bool) -> some View {
-        HStack(spacing: 3) {
-            Image(systemName: done ? "checkmark.circle.fill" : "circle")
-                .font(.system(size: 9, weight: .semibold))
-            Text(title)
-                .font(.system(size: 10, weight: .semibold))
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
+    private func documentRow(title: String, detail: String?, icon: String, busy: Bool,
+                             action: @escaping () -> Void) -> some View {
+        Button {
+            Haptics.tap()
+            action()
+        } label: {
+            HStack(spacing: DS.Space.s) {
+                Image(systemName: icon).foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: DS.Space.xxs) {
+                    Text(title).font(.body.weight(.medium)).foregroundStyle(.primary)
+                    if let detail, !detail.isEmpty {
+                        Text(detail).font(.footnote).foregroundStyle(.secondary)
+                    }
+                }
+                Spacer(minLength: 0)
+                if busy { ProgressView() }
+            }
+            .padding(.vertical, DS.Space.xs)
+            .frame(minHeight: 48)
+            .contentShape(Rectangle())
         }
-        .foregroundStyle(done ? .green : .secondary)
-        .padding(.horizontal, 7)
-        .padding(.vertical, 3.5)
-        .background((done ? Color.green : Color.secondary).opacity(0.10), in: Capsule())
+        .buttonStyle(.plain)
     }
 
     // MARK: - Unified Task Queue (In-Progress / Completed / Failed)
@@ -565,9 +499,4 @@ struct WuMindWorkbenchView: View {
         .buttonStyle(.plain)
     }
 
-    // MARK: - Workspace Management Shortcuts (Projects, Schedules, Skills, Wallet/Channel)
-
-    private var workspaceToolsRow: some View {
-        studioGrid(managementEntries)
-    }
 }
