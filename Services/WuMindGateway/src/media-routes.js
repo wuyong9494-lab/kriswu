@@ -815,7 +815,7 @@ export async function handleManagedVideoCreate(request, env, {
       });
       rawText = await upstreamRes.text();
     } else {
-      // OpenAI / AIHubMix unified POST /v1/videos (with Kling/Seedance schemas & automatic /ai/v1/videos upgrade)
+      // OpenAI / AIHubMix unified POST /v1/videos (with Kling/Seedance schemas)
       submitURL = supply.videosURL || `${supply.baseOrigin}/v1/videos`;
       storedVideoBase = submitURL;
       let wireBody;
@@ -829,16 +829,8 @@ export async function handleManagedVideoCreate(request, env, {
           sound: "on",
         };
       } else if (protocol === "aihubmix_seedance") {
-        wireBody = {
-          model: model.id,
-          prompt,
-          extra_body: {
-            ratio: aspectRatio,
-            duration: paramCheck.seconds,
-            resolution,
-            watermark: false,
-          },
-        };
+        submitURL = storedVideoBase = `${supply.baseOrigin}/ai/v1/videos`;
+        wireBody = { model: model.id, prompt, duration: paramCheck.seconds, aspect_ratio: aspectRatio, resolution };
       } else {
         wireBody = {
           model: model.id,
@@ -868,22 +860,7 @@ export async function handleManagedVideoCreate(request, env, {
       });
       rawText = await upstreamRes.text();
 
-      if (!wanRequest && !upstreamRes.ok && supply.provider === "aihubmix" && (rawText.includes("protocol_not_supported") || rawText.includes("/ai/v1/videos"))) {
-        submitURL = `${supply.baseOrigin}/ai/v1/videos`;
-        storedVideoBase = submitURL;
-        upstreamRes = await fetch(submitURL, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            model: model.id,
-            prompt,
-            duration: paramCheck.seconds,
-            aspect_ratio: aspectRatio,
-            resolution,
-          }),
-        });
-        rawText = await upstreamRes.text();
-      }
+
     }
 
     if (!upstreamRes.ok) {

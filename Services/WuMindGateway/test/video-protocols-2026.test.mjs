@@ -7,9 +7,7 @@
  *     - Full create -> poll `GET /v1beta/interactions/{id}` -> download inline base64 MP4 with `ftyp` check!
  *  2. AIHubMix Kling v3 Omni (`kling-v3-omni`):
  *     - Uses Kling schema (`mode`, `aspect_ratio`, `duration`, `sound`, NO `size`!) on both probe and create.
- *  3. AIHubMix `/ai/v1/videos` Auto-Upgrade (`doubao-seedance-2-0-fast-260128`):
- *     - When `/v1/videos` returns HTTP 400 `protocol_not_supported` (`Use POST /ai/v1/videos`),
- *       automatically upgrades to `POST /ai/v1/videos`, polls `GET /ai/v1/videos/{id}`, and downloads `GET /ai/v1/videos/{id}/content`!
+ *  3. AIHubMix Seedance uses the unified endpoint directly for submission, status and download.
  */
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -117,10 +115,13 @@ try {
       }), { status: 200, headers: { "Content-Type": "application/json" } });
     }
 
-    // 2. AIHubMix /v1/videos (Kling succeeds; Seedance instructs /ai/v1/videos upgrade)
+    // 2. AIHubMix /v1/videos (Kling succeeds; Seedance must skip this endpoint)
     if (url === "https://aihubmix.com/v1/videos" && method === "POST") {
       const parsed = JSON.parse(bodyText);
       if (parsed.model === "kling-v3-omni") {
+        if (parsed.prompt === "模拟提交后连接中断") {
+          return new Response("Unexpected disconnect after forwarding to /ai/v1/videos", { status: 502 });
+        }
         assert.equal(parsed.size, undefined, "Kling MUST NOT send size field");
         assert.ok(["std", "pro"].includes(parsed.mode));
         assert.equal(parsed.aspect_ratio, "16:9");
@@ -130,14 +131,7 @@ try {
           headers: { "Content-Type": "application/json" },
         });
       }
-      if (parsed.model === "doubao-seedance-2-0-fast-260128") {
-        return new Response(JSON.stringify({
-          error: {
-            code: "protocol_not_supported",
-            message: "This model does not support the legacy protocol. Use POST /ai/v1/videos.",
-          },
-        }), { status: 400, headers: { "Content-Type": "application/json" } });
-      }
+      assert.notEqual(parsed.model, "doubao-seedance-2-0-fast-260128", "Seedance must only submit to the unified endpoint");
       assert.notEqual(parsed.model, "wan2.6-t2v", "Wan must not use the legacy route");
       return new Response(JSON.stringify({ id: "wan_1", status: "completed" }), {
         status: 200,
@@ -241,7 +235,7 @@ try {
   assert.ok(seedRow);
   assert.equal(seedRow.supportedParams.protocol, "aihubmix_seedance");
 
-  // Probe all three live video models (verifies Interactions, Kling schema, and /ai/v1/videos auto-upgrade!)
+  // Probe all three live video models (verifies Interactions, Kling schema, and /ai/v1/videos direct routing!)
   const probe = await call("POST", "/v1/admin/models/probe", {
     modelIDs: ["gemini-omni-1.2-flash", "kling-v3-omni", "doubao-seedance-2-0-fast-260128", "wan2.6-t2v"],
   }, adminHdr);
@@ -264,6 +258,14 @@ try {
   assert.equal(batch.status, 200);
   assert.equal(batch.data.appliedCount, 4);
 
+  const beforeAmbiguousSubmit = observedCalls.length;
+  const ambiguousSubmit = await call("POST", "/v1/videos", {
+    model: "kling-v3-omni", prompt: "模拟提交后连接中断", seconds: "5", size: "1280x720",
+  }, { ...authHdr, "Idempotency-Key": "kling-ambiguous" });
+  assert.ok(ambiguousSubmit.status >= 400);
+  assert.deepEqual(observedCalls.slice(beforeAmbiguousSubmit).filter(call => call.method === "POST").map(call => call.url),
+    ["https://aihubmix.com/v1/videos"]);
+
   // Execute end-to-end Google Gemini Omni 1.2 Flash video flow
   const omniCreate = await call("POST", "/v1/videos", {
     model: "gemini-omni-1.2-flash",
@@ -282,7 +284,7 @@ try {
   assert.equal(omniDl.status, 200);
   assert.deepEqual(Buffer.from(omniDl.bytes), Buffer.from(SAMPLE_MP4));
 
-  // Execute end-to-end AIHubMix Seedance with automatic /ai/v1/videos upgrade -> poll -> content
+  // Execute end-to-end AIHubMix Seedance with direct /ai/v1/videos routing -> poll -> content
   const seedCreate = await call("POST", "/v1/videos", {
     model: "doubao-seedance-2-0-fast-260128",
     prompt: "城市航拍黄昏车流",
@@ -326,7 +328,7 @@ try {
   assert.equal(klingDl.status, 200);
   assert.deepEqual(Buffer.from(klingDl.bytes), Buffer.from(SAMPLE_MP4));
 
-  console.log("PASS: All 2026 Video Protocol tests (Gemini Omni 1.2 Flash Interactions, AIHubMix Kling v3 Omni, and /ai/v1/videos auto-upgrade) succeeded.");
+  console.log("PASS: All 2026 Video Protocol tests (Gemini Omni 1.2 Flash Interactions, AIHubMix Kling v3 Omni, and /ai/v1/videos direct routing) succeeded.");
 } finally {
   globalThis.fetch = originalFetch;
 }

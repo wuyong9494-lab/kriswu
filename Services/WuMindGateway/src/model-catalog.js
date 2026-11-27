@@ -1294,15 +1294,13 @@ async function probeSingleCatalogModel(row, env) {
         };
       } else if (params.protocol === "aihubmix_seedance") {
         headers.Authorization = `Bearer ${supply.key}`;
+        url = `${supply.baseOrigin}/ai/v1/videos`;
         payload = {
           model: row.model_id,
           prompt: "Gentle ocean waves at sunrise, soft golden light",
-          extra_body: {
-            ratio: "16:9",
-            duration: Number(params.defaultSeconds || 5),
-            resolution: "720p",
-            watermark: false,
-          },
+          duration: Number(params.defaultSeconds || 5),
+          aspect_ratio: "16:9",
+          resolution: "720p",
         };
       } else {
         headers.Authorization = `Bearer ${supply.key}`;
@@ -1316,24 +1314,8 @@ async function probeSingleCatalogModel(row, env) {
 
       const wanRequest = buildAIHubMixWan26VideoRequest(supply, row.model_id, payload.prompt, params.defaultSeconds || 5, params.defaultSize || "1280x720");
       if (wanRequest) ({ url, payload } = wanRequest);
-      let res = await fetch(url, { method: "POST", headers, body: JSON.stringify(payload) });
-      let raw = await res.text();
-      // Auto-upgrade only when the upstream explicitly rejected the legacy protocol.
-      if (!wanRequest && !res.ok && supply.provider === "aihubmix" && (raw.includes("protocol_not_supported") || raw.includes("/ai/v1/videos"))) {
-        url = `${supply.baseOrigin}/ai/v1/videos`;
-        res = await fetch(url, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            model: row.model_id,
-            prompt: "Gentle ocean waves at sunrise, soft golden light",
-            duration: Number(params.defaultSeconds || 5),
-            aspect_ratio: "16:9",
-            resolution: "720p",
-          }),
-        });
-        raw = await res.text();
-      }
+      const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(payload) });
+      const raw = await res.text();
       const latency = Date.now() - started;
       if (!res.ok) {
         const msg = sanitizeUpstreamError(res.status, raw);
