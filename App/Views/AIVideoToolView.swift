@@ -320,6 +320,7 @@ struct AIVideoToolView: View {
                 prompt: stagePrompt,
                 isRunning: isGenerating,
                 progress: progress?.percent,
+                jobID: activeJobID,
                 asset: clip?.fileURL,
                 notice: errorMessage,
                 onStop: { sessionStore.cancelGeneration() }
@@ -959,6 +960,7 @@ struct AIVideoToolView: View {
                 }
                 return candidate
             }()
+            let gateway = wmStore.gatewayBaseURL
             let sizeStr = preferredSize
             let work = WuMindWorksStore.shared.recordSubmittedTask(
                 workType: .video,
@@ -987,7 +989,7 @@ struct AIVideoToolView: View {
                 do {
                     token = try await wmStore.ensureManagedAccount()
                     submitted = try await WuMindGatewayClient().submitManagedVideo(
-                        gatewayURL: wmStore.gatewayBaseURL,
+                        gatewayURL: gateway,
                         userToken: token,
                         modelID: managedModel.id,
                         prompt: trimmed,
@@ -1022,6 +1024,7 @@ struct AIVideoToolView: View {
                     workID: work.id,
                     jobID: submitted.id,
                     remoteWorkID: submitted.workID,
+                    gatewayURL: gateway,
                     prompt: trimmed,
                     modelName: managedModel.displayName,
                     aspect: selectedAspect,
@@ -1129,6 +1132,10 @@ struct AIVideoToolView: View {
 
     private func resumeUnconfirmedJob(_ job: UnconfirmedManagedVideoJob) {
         guard !isGenerating else { return }
+        guard wmStore.gatewayBaseURL == job.gatewayURL else {
+            errorMessage = "请切回提交此视频时使用的网关，再查询原任务。"
+            return
+        }
         errorMessage = nil
         isGenerating = true
         activeJobID = job.jobID
@@ -1175,7 +1182,7 @@ struct AIVideoToolView: View {
                 current = initialJob
             } else {
                 current = try await WuMindGatewayClient().fetchManagedVideoStatus(
-                    gatewayURL: wmStore.gatewayBaseURL,
+                    gatewayURL: job.gatewayURL,
                     userToken: token,
                     jobID: job.jobID
                 )
@@ -1184,7 +1191,7 @@ struct AIVideoToolView: View {
                 try Task.checkCancellation()
                 try await Task.sleep(nanoseconds: 4_000_000_000)
                 current = try await WuMindGatewayClient().fetchManagedVideoStatus(
-                    gatewayURL: wmStore.gatewayBaseURL,
+                    gatewayURL: job.gatewayURL,
                     userToken: token,
                     jobID: job.jobID
                 )
@@ -1215,7 +1222,7 @@ struct AIVideoToolView: View {
             downloading = true
             progress = .init(stage: "正在下载 MP4 成片…", percent: 95, elapsedSeconds: Date().timeIntervalSince(job.started))
             let mp4Data = try await WuMindGatewayClient().downloadManagedVideoContent(
-                gatewayURL: wmStore.gatewayBaseURL,
+                gatewayURL: job.gatewayURL,
                 userToken: token,
                 jobID: job.jobID
             )
@@ -1291,6 +1298,7 @@ struct WuMindVideoGenerationStage: View {
     let prompt: String
     let isRunning: Bool
     let progress: Int?
+    var jobID: String? = nil
     let asset: URL?
     let notice: String?
     let onStop: (() -> Void)?
@@ -1417,6 +1425,15 @@ struct WuMindVideoGenerationStage: View {
                         .accessibilityLabel("分享视频")
                     }
                 }
+                if let jobID, !jobID.isEmpty {
+                    Text("任务号 " + jobID)
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .textSelection(.enabled)
+                        .accessibilityIdentifier("wumind.video.stage.jobID")
+                }
                 if let estimate {
                     ProgressView(value: Double(estimate), total: 100)
                         .tint(.white)
@@ -1480,6 +1497,7 @@ struct WuMindChatVideoStage: View {
                 prompt: work.prompt,
                 isRunning: running,
                 progress: nil,
+                jobID: work.upstreamJobID,
                 asset: works.localAssetURL(for: work),
                 notice: work.errorMessage,
                 onStop: running ? { chat.stopGeneration() } : nil
