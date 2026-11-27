@@ -96,7 +96,7 @@ enum WuMindChatBuildService {
 
     static func generateMedia(
         _ route: MediaRoute, prompt: String, attachments: [WuMindAttachment], idempotency: String,
-        jobAccepted: @escaping @MainActor (String) -> Void, status: (String) -> Void
+        jobAccepted: @escaping @MainActor @Sendable (String) -> Void, status: (String) -> Void
     ) async throws -> Artifact {
         let title = String(prompt.prefix(42))
         let reference: AIImageTool.ReferenceImage? = attachments.first.flatMap { item in

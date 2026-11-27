@@ -2212,7 +2212,7 @@ final class WuMindStore: ObservableObject {
         saveNow()
         activeGenerationTask = Task { [weak self] in
             guard let self else { return }
-            var remoteJobID: String?
+            var remoteJobID: String? { works.works.first { $0.id == work.id }?.upstreamJobID }
             do {
                 let status: (String) -> Void = { stage in
                     guard self.activeTurnID == turnID else { return }
@@ -2224,8 +2224,8 @@ final class WuMindStore: ObservableObject {
                         mediaRoute, prompt: question, attachments: attachments,
                         idempotency: "chat-build-\(turnID.uuidString)",
                         jobAccepted: { id in
-                            guard self.activeTurnID == turnID, self.currentStorageOwnerID == owner, remoteJobID != id else { return }
-                            remoteJobID = id
+                            guard self.activeTurnID == turnID, self.currentStorageOwnerID == owner,
+                                  works.works.first(where: { $0.id == work.id })?.upstreamJobID != id else { return }
                             works.updateProgress(id: work.id, status: "in_progress", progress: 10, upstreamJobID: id)
                         }, status: status
                     )
