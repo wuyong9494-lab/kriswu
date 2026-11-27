@@ -40,6 +40,25 @@ struct WuMindWalletSheet: View {
         NavigationStack {
             List {
                 balanceOverviewSection
+                if let status = store.managedAccountStatus {
+                    Section {
+                        NavigationLink {
+                            List {
+                                if status.ledger.isEmpty {
+                                    Text("暂无计费或充值流水").foregroundStyle(.secondary)
+                                } else {
+                                    ledgerSection
+                                }
+                            }
+                            .appList()
+                            .navigationTitle("最近账单")
+                            .navigationBarTitleDisplayMode(.inline)
+                        } label: {
+                            Label("查看最近账单", systemImage: "list.bullet.rectangle")
+                        }
+                        .accessibilityIdentifier("wumind.wallet.ledger")
+                    }
+                }
                 if isTestFlightComplianceRestricted {
                     testFlightComplianceSection
                     appleIAPSection
@@ -55,7 +74,6 @@ struct WuMindWalletSheet: View {
                     }
                 }
                 pricingTableSection
-                ledgerSection
                 gatewayEndpointSection
             }
             .appList()
@@ -63,15 +81,8 @@ struct WuMindWalletSheet: View {
             .navigationTitle("WUMIND 钱包与计费")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button {
-                        Haptics.tap()
-                        showingGuide = true
-                    } label: {
-                        Label("充值教程", systemImage: "book.closed.fill")
-                            .font(.subheadline.weight(.semibold))
-                    }
-                    .accessibilityIdentifier("wumind.wallet.guideToolbar")
+                if store.hasGatewayURL {
+                    ToolbarItem(placement: .navigationBarLeading) { rechargeGuideButton }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("完成") { dismiss() }
@@ -117,6 +128,17 @@ struct WuMindWalletSheet: View {
         }
     }
 
+    private var rechargeGuideButton: some View {
+        Button {
+            Haptics.tap()
+            showingGuide = true
+        } label: {
+            Label("充值与计费说明", systemImage: "book.closed")
+                .font(.subheadline.weight(.semibold))
+        }
+        .accessibilityIdentifier("wumind.wallet.guideToolbar")
+    }
+
     private var balanceOverviewSection: some View {
         Section {
             VStack(alignment: .leading, spacing: 12) {
@@ -132,17 +154,20 @@ struct WuMindWalletSheet: View {
                         }
                     }
                     Spacer()
-                    Button { refreshAll() } label: {
-                        if busy { ProgressView() } else { Label("刷新", systemImage: "arrow.clockwise") }
+                    if store.hasGatewayURL {
+                        Button { refreshAll() } label: {
+                            if busy { ProgressView() } else { Label("刷新", systemImage: "arrow.clockwise") }
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(busy)
                     }
-                    .buttonStyle(.bordered)
-                    .disabled(busy || !store.hasGatewayURL)
                 }
                 if store.isBillingExempt {
                     HStack(spacing: 8) {
                         Image(systemName: "checkmark.shield.fill")
                             .foregroundStyle(.purple)
-                        Text(String(format: "管理员免充值，用量照常记录。每日上限 ¥%.0f。", store.managedAccountStatus?.dailyCostCapYuan ?? 200))
+                        Text(store.managedAccountStatus?.dailyCostCapYuan.map { String(format: "管理员免充值，用量照常记录。每日上限 ¥%.0f。", $0) }
+                             ?? "管理员免充值，用量照常记录。")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.purple)
                             .fixedSize(horizontal: false, vertical: true)
@@ -161,40 +186,12 @@ struct WuMindWalletSheet: View {
                         HStack {
                             Text("剩余额度占比 \(Int((ratio * 100).rounded()))%")
                             Spacer()
-                            Text(String(format: "实购 ¥%.2f · 赠额 ¥%.2f", status.purchasedRechargedYuan ?? 0, status.adminGrantedYuan ?? 0))
+                            Text(String(format: "累计充值 ¥%.2f", status.totalRechargedYuan))
                         }
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                     }
                 }
-
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: dynamicTypeSize.isAccessibilitySize ? 1 : 2), spacing: 8) {
-                    walletStatTile(
-                        title: "今日已用",
-                        value: String(format: "¥%.4f", store.managedAccountStatus?.todaySpentYuan ?? 0),
-                        sub: "\(WuMindAccountStatus.formatTokens(store.managedAccountStatus?.todayTokens ?? 0)) Tokens",
-                        tint: .indigo
-                    )
-                    walletStatTile(
-                        title: "累计 Token 用量",
-                        value: WuMindAccountStatus.formatTokens(store.managedAccountStatus?.totalTokens ?? 0),
-                        sub: "共 \(store.managedAccountStatus?.totalRequests ?? 0) 次请求",
-                        tint: .blue
-                    )
-                    walletStatTile(
-                        title: "累计消费金额",
-                        value: String(format: "¥%.4f", store.managedAccountStatus?.totalSpentYuan ?? 0),
-                        sub: "输入 \(WuMindAccountStatus.formatTokens(store.managedAccountStatus?.totalPromptTokens ?? 0)) · 输出 \(WuMindAccountStatus.formatTokens((store.managedAccountStatus?.totalCompletionTokens ?? 0) + (store.managedAccountStatus?.totalReasoningTokens ?? 0)))",
-                        tint: .orange
-                    )
-                    walletStatTile(
-                        title: "购买与赠额",
-                        value: String(format: "¥%.2f", store.managedAccountStatus?.purchasedRechargedYuan ?? store.managedAccountStatus?.totalRechargedYuan ?? 0),
-                        sub: String(format: "管理员赠额 ¥%.2f", store.managedAccountStatus?.adminGrantedYuan ?? 0),
-                        tint: .green
-                    )
-                }
-                .accessibilityIdentifier("wumind.wallet.usageGrid")
 
                 if !store.managedAccountID.isEmpty {
                     HStack(spacing: 8) {
@@ -222,6 +219,10 @@ struct WuMindWalletSheet: View {
                     .disabled(busy)
                 }
 
+                usageSummary
+                if !store.hasGatewayURL {
+                    rechargeGuideButton.frame(minHeight: 44)
+                }
                 if let sb = store.managedAccountStatus?.sandboxBalanceYuan, sb > 0 {
                     HStack(spacing: 8) {
                         Image(systemName: "flask.fill")
@@ -267,6 +268,46 @@ struct WuMindWalletSheet: View {
                 }
             }
             .padding(.vertical, 4)
+        }
+    }
+
+    @ViewBuilder
+    private var usageSummary: some View {
+        if let status = store.managedAccountStatus {
+            let input = status.totalPromptTokens.map(WuMindAccountStatus.formatTokens)
+            let output = status.totalCompletionTokens.map { WuMindAccountStatus.formatTokens($0 + (status.totalReasoningTokens ?? 0)) }
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: DS.Space.xs), count: dynamicTypeSize.isAccessibilitySize ? 1 : 2), spacing: DS.Space.xs) {
+                walletStatTile(
+                    title: "今日已用",
+                    value: status.todaySpentYuan.map { String(format: "¥%.4f", $0) } ?? "未获取",
+                    sub: status.todayTokens.map { "\(WuMindAccountStatus.formatTokens($0)) Tokens" } ?? "今日用量未获取",
+                    tint: .indigo
+                )
+                walletStatTile(
+                    title: "累计 Token 用量",
+                    value: input != nil && output != nil ? WuMindAccountStatus.formatTokens(status.totalTokens) : "未获取",
+                    sub: status.totalRequests.map { "共 \($0) 次请求" } ?? "请求数未获取",
+                    tint: .blue
+                )
+                walletStatTile(
+                    title: "累计消费金额",
+                    value: String(format: "¥%.4f", status.totalSpentYuan),
+                    sub: "输入 \(input ?? "未获取") · 输出 \(output ?? "未获取")",
+                    tint: .orange
+                )
+                walletStatTile(
+                    title: "购买与赠额",
+                    value: status.purchasedRechargedYuan.map { String(format: "实购 ¥%.2f", $0) } ?? String(format: "累计充值 ¥%.2f", status.totalRechargedYuan),
+                    sub: status.adminGrantedYuan.map { String(format: "管理员赠额 ¥%.2f", $0) } ?? "赠额未获取",
+                    tint: .green
+                )
+            }
+            .accessibilityIdentifier("wumind.wallet.usageGrid")
+        } else {
+            Text(store.hasGatewayURL ? "尚未获取账户用量与账单。" : "尚未获取账户用量与账单。请联系管理员确认内置网关。")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .accessibilityIdentifier("wumind.wallet.usageGrid")
         }
     }
 
@@ -740,7 +781,8 @@ struct WuMindWalletSheet: View {
         if let bal = store.managedBalanceYuan {
             return String(format: "¥%.2f", bal)
         }
-        return store.hasGatewayURL ? "未激活" : "未连接网关"
+        guard store.hasGatewayURL else { return "未连接网关" }
+        return store.managedAccountID.isEmpty ? "未激活" : "未获取"
     }
 
     private func formatPrice(_ value: Double) -> String {
@@ -780,12 +822,11 @@ struct WuMindWalletSheet: View {
             Text(value)
                 .font(.subheadline.monospacedDigit().weight(.bold))
                 .foregroundStyle(tint)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+                .fixedSize(horizontal: false, vertical: true)
             Text(sub)
-                .font(.system(size: 10))
+                .font(.caption)
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 10)
@@ -1038,6 +1079,14 @@ struct WuMindAdminBillingView: View {
                 }
                 .listRowInsets(EdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 12))
                 .listRowBackground(Color.clear)
+                if !hasGatewayCredentials {
+                    NavigationLink {
+                        gatewayDiagnostics
+                    } label: {
+                        Label("打开网关与诊断", systemImage: "network")
+                    }
+                    .accessibilityIdentifier("wumind.admin.gatewayFromStatus")
+                }
             } header: {
                 Text("运营状态总览")
             }
@@ -1084,7 +1133,7 @@ struct WuMindAdminBillingView: View {
                 .accessibilityIdentifier("wumind.admin.modelCatalog")
 
                 NavigationLink {
-                    WuMindAdminPaymentsPage(summary: summary) {
+                    WuMindAdminPaymentsPage(initialConfig: wumind.managedConfig, summary: summary, canPublish: hasGatewayCredentials) {
                         Task { await refreshDashboard(forceUpstreamRefresh: false) }
                     }
                 } label: {
@@ -1098,13 +1147,7 @@ struct WuMindAdminBillingView: View {
                 .accessibilityIdentifier("wumind.admin.payments")
 
                 NavigationLink {
-                    WuMindAdminGatewayDiagnosticsPage(
-                        upstreamBalance: $upstreamBalance,
-                        summary: summary,
-                        onUpdated: {
-                            Task { await refreshDashboard(forceUpstreamRefresh: false) }
-                        }
-                    )
+                    gatewayDiagnostics
                 } label: {
                     entryRow(
                         title: "网关与诊断",
@@ -1121,6 +1164,16 @@ struct WuMindAdminBillingView: View {
         .appList()
     }
 
+    private var gatewayDiagnostics: some View {
+        WuMindAdminGatewayDiagnosticsPage(
+            upstreamBalance: $upstreamBalance,
+            summary: summary,
+            onUpdated: {
+                Task { await refreshDashboard(forceUpstreamRefresh: false) }
+            }
+        )
+    }
+
     // MARK: - 4 First-Screen Status Cards
 
     private var upstreamBalanceCard: some View {
@@ -1130,7 +1183,7 @@ struct WuMindAdminBillingView: View {
 
         if !hasGatewayCredentials {
             valueText = "未配置"
-            detailText = "前往「网关与诊断」填写密钥"
+            detailText = "待连接计费网关"
             tint = .secondary
         } else if let err = balanceError {
             valueText = "获取失败"
@@ -1368,9 +1421,11 @@ struct WuMindAdminBillingView: View {
 private struct WuMindAdminPaymentsPage: View {
     @ObservedObject private var wumind = WuMindStore.shared
     let summary: WuMindAdminSummary?
+    let canPublish: Bool
     let onUpdated: () -> Void
 
-    @State private var configDraft = WuMindCommercialConfig()
+    @State private var configDraft: WuMindCommercialConfig
+    @State private var showingInactiveQR = false
     @State private var wechatPickerItem: PhotosPickerItem?
     @State private var alipayPickerItem: PhotosPickerItem?
     @State private var voucherAmount = "30"
@@ -1380,6 +1435,13 @@ private struct WuMindAdminPaymentsPage: View {
     @State private var busy = false
     @State private var statusBanner: String?
     @State private var errorBanner: String?
+
+    init(initialConfig: WuMindCommercialConfig, summary: WuMindAdminSummary?, canPublish: Bool, onUpdated: @escaping () -> Void) {
+        _configDraft = State(initialValue: initialConfig)
+        self.summary = summary
+        self.canPublish = canPublish
+        self.onUpdated = onUpdated
+    }
 
     var body: some View {
         Form {
@@ -1399,8 +1461,8 @@ private struct WuMindAdminPaymentsPage: View {
             }
 
             Section {
-                LabeledContent("网关自动入账开关", value: (summary?.autoCreditPaused ?? true) ? "已暂停（安全保护）" : "已开启")
-                LabeledContent("Apple 正式内购开关", value: (summary?.appleIAPProductionEnabled ?? false) ? "已开启" : "未开启")
+                LabeledContent("网关自动入账开关", value: summary?.autoCreditPaused.map { $0 ? "已暂停（安全保护）" : "已开启" } ?? "未获取")
+                LabeledContent("Apple 正式内购开关", value: summary?.appleIAPProductionEnabled.map { $0 ? "已开启" : "未开启" } ?? "未获取")
                 Picker("展示合规模式", selection: Binding(
                     get: { configDraft.resolvedBillingMode },
                     set: { configDraft.billingMode = $0.rawValue }
@@ -1428,47 +1490,19 @@ private struct WuMindAdminPaymentsPage: View {
                 Text("网关环境变量 AUTO_CREDIT_PAUSED 与 ALLOW_APPLE_PRODUCTION_IAP 仅由 Cloudflare 运维控制，App 端不会擅自更改。")
             }
 
-            Section("收款二维码与充值指引") {
-                HStack(spacing: 16) {
-                    qrSlot(
-                        title: configDraft.wechatQRBase64 == nil ? "上传微信码" : "更换微信码",
-                        base64: configDraft.wechatQRBase64,
-                        tint: .green,
-                        picker: $wechatPickerItem,
-                        onClear: { configDraft.wechatQRBase64 = nil }
-                    )
-                    qrSlot(
-                        title: configDraft.alipayQRBase64 == nil ? "上传支付宝码" : "更换支付宝码",
-                        base64: configDraft.alipayQRBase64,
-                        tint: .blue,
-                        picker: $alipayPickerItem,
-                        onClear: { configDraft.alipayQRBase64 = nil }
-                    )
-                }
-                .padding(.vertical, 4)
-
-                TextField("充值指引说明", text: $configDraft.rechargeNote, axis: .vertical)
-                    .lineLimit(2...4)
-                    .font(.footnote)
-                TextField("管理员联系方式（选填）", text: $configDraft.contactNote)
-                    .font(.footnote)
+            Section("钱包公告") {
                 TextField("钱包顶部公告（选填）", text: $configDraft.announcement)
-                    .font(.footnote)
+            }
 
-                Button {
-                    saveAndPublish()
-                } label: {
-                    HStack {
-                        Spacer()
-                        if busy { ProgressView().controlSize(.small) }
-                        Text("保存并发布收款配置")
-                            .font(.subheadline.weight(.bold))
-                        Spacer()
+            Section("站外收款") {
+                if configDraft.resolvedBillingMode == .appStoreIAP {
+                    DisclosureGroup("查看或编辑未启用的收款码与指引", isExpanded: $showingInactiveQR) {
+                        qrFields
                     }
+                    .accessibilityIdentifier("wumind.admin.inactiveQR")
+                } else {
+                    qrFields
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(busy)
-                .accessibilityIdentifier("wumind.admin.publish")
             }
 
             Section("发放充值兑换码") {
@@ -1504,7 +1538,14 @@ private struct WuMindAdminPaymentsPage: View {
         .navigationTitle("充值与支付")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.visible, for: .navigationBar)
-        .onAppear { configDraft = wumind.managedConfig }
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                AppSaveToolbarButton(title: canPublish ? "保存并发布" : "保存到本机", isSaving: busy, accessibilityID: "wumind.admin.publish") {
+                    saveAndPublish()
+                }
+                .accessibilityHint("保存收款配置，管理网关已连接时同时发布。")
+            }
+        }
         .onChange(of: wechatPickerItem) { item in
             guard let item else { return }
             Task { @MainActor in
@@ -1512,7 +1553,7 @@ private struct WuMindAdminPaymentsPage: View {
                    let img = UIImage(data: data),
                    let encoded = WuMindAttachmentHelper.encodeQRCodeImage(img) {
                     configDraft.wechatQRBase64 = encoded
-                    statusBanner = "已载入微信收款码，请点击「保存并发布」。"
+                    statusBanner = "微信收款码已更改，尚未保存。"
                 }
                 wechatPickerItem = nil
             }
@@ -1524,11 +1565,39 @@ private struct WuMindAdminPaymentsPage: View {
                    let img = UIImage(data: data),
                    let encoded = WuMindAttachmentHelper.encodeQRCodeImage(img) {
                     configDraft.alipayQRBase64 = encoded
-                    statusBanner = "已载入支付宝收款码，请点击「保存并发布」。"
+                    statusBanner = "支付宝收款码已更改，尚未保存。"
                 }
                 alipayPickerItem = nil
             }
         }
+    }
+
+    @ViewBuilder
+    private var qrFields: some View {
+        HStack(spacing: 16) {
+            qrSlot(
+                title: configDraft.wechatQRBase64 == nil ? "上传微信码" : "更换微信码",
+                base64: configDraft.wechatQRBase64,
+                tint: .green,
+                picker: $wechatPickerItem,
+                onClear: { configDraft.wechatQRBase64 = nil }
+            )
+            qrSlot(
+                title: configDraft.alipayQRBase64 == nil ? "上传支付宝码" : "更换支付宝码",
+                base64: configDraft.alipayQRBase64,
+                tint: .blue,
+                picker: $alipayPickerItem,
+                onClear: { configDraft.alipayQRBase64 = nil }
+            )
+        }
+        .padding(.vertical, 4)
+
+        TextField("充值指引说明", text: $configDraft.rechargeNote, axis: .vertical)
+            .accessibilityIdentifier("wumind.admin.rechargeNote")
+            .lineLimit(2...4)
+            .font(.footnote)
+        TextField("管理员联系方式（选填）", text: $configDraft.contactNote)
+            .font(.footnote)
     }
 
     private func qrSlot(
