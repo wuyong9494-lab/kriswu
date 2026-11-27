@@ -6,7 +6,8 @@ public enum WuMindGatewayConfiguration {
         let url = try WuMindGatewayClient.normalizedGatewayURL(input)
         guard var parts = URLComponents(url: url, resolvingAgainstBaseURL: false),
               let host = parts.host?.lowercased(),
-              host != "dash.cloudflare.com",
+              !["dash.cloudflare.com", "api.cloudflare.com"].contains(host),
+              Set(parts.path.lowercased().split(separator: "/")).isDisjoint(with: ["admin", "dashboard", "edit", ".", ".."]),
               !host.hasPrefix("."),
               !host.contains(".."),
               !host.hasSuffix(".") else {
@@ -18,6 +19,21 @@ public enum WuMindGatewayConfiguration {
         while parts.percentEncodedPath.hasSuffix("/") { parts.percentEncodedPath.removeLast() }
         guard let canonical = parts.string else { throw WuMindGatewayClient.GatewayError.invalidGatewayURL }
         return canonical
+    }
+
+    /// Only the public origin for this installation's build configuration is packaged.
+    public static func bundledAddress(in bundle: Bundle = .main) -> String? {
+        guard let raw = bundle.object(forInfoDictionaryKey: "WuMindGatewayURL") as? String else { return nil }
+        return try? address(raw)
+    }
+
+    /// Legacy settings can describe another build, including a testing gateway.
+    public static func resolvedAddress(saved: String?, bundled: String?) -> String? {
+        guard let bundled, let pinned = try? address(bundled) else { return nil }
+        if let saved, let previous = try? address(saved), previous == pinned {
+            return previous
+        }
+        return pinned
     }
 
     /// Commit the normalized address only after a successful write.

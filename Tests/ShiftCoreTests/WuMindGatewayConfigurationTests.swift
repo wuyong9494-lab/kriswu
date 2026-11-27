@@ -13,6 +13,18 @@ final class WuMindGatewayConfigurationTests: XCTestCase {
         }
     }
 
+    func testManagedAddressComesFromThisBuildOnFreshInstallAndUpgrade() {
+        let release = "https://gateway.example.com/service"
+        let test = "https://gateway-test.example.com"
+        XCTAssertEqual(WuMindGatewayConfiguration.resolvedAddress(saved: nil, bundled: release), release)
+        XCTAssertEqual(WuMindGatewayConfiguration.resolvedAddress(saved: release + "/", bundled: release), release)
+        XCTAssertEqual(WuMindGatewayConfiguration.resolvedAddress(saved: test, bundled: release), release)
+        XCTAssertEqual(WuMindGatewayConfiguration.resolvedAddress(saved: release, bundled: test), test)
+        for missing in [nil, "", "https://gateway.example.com/admin/edit"] as [String?] {
+            XCTAssertNil(WuMindGatewayConfiguration.resolvedAddress(saved: test, bundled: missing))
+        }
+    }
+
     func testExplicitSaveReturnsOnlyAfterNormalizedAddressIsWritten() throws {
         let base = "https://gateway.example.com/proxy"
         var calls: [String] = []

@@ -5,6 +5,11 @@ options:
   deploymentTarget:
     iOS: "16.2"
   developmentLanguage: zh-Hans
+  defaultConfig: Release
+configs:
+  Debug: debug
+  Testing: release
+  Release: release
 settings:
   base:
     MARKETING_VERSION: "1.2"
@@ -100,6 +105,9 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kriswu.shiftreminder
+        # Public Worker origins only. Leave empty until each deployment is verified.
+        WUMIND_PRODUCTION_GATEWAY_URL: ""
+        WUMIND_TEST_GATEWAY_URL: ""
         # Empty in ordinary builds. Only a separately authorized internal
         # archive may pass L12_INTERNAL_PREVIEW_CONDITION=L12_INTERNAL_PREVIEW.
         SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) $(L12_INTERNAL_PREVIEW_CONDITION)"
@@ -116,6 +124,20 @@ targets:
         SWIFT_STRICT_CONCURRENCY: complete
         CODE_SIGN_STYLE: Automatic
         ENABLE_PREVIEWS: YES
+      configs:
+        Debug:
+          WUMIND_BUILD_GATEWAY_URL: "$(WUMIND_TEST_GATEWAY_URL)"
+        Testing:
+          WUMIND_BUILD_GATEWAY_URL: "$(WUMIND_TEST_GATEWAY_URL)"
+        Release:
+          WUMIND_BUILD_GATEWAY_URL: "$(WUMIND_PRODUCTION_GATEWAY_URL)"
+    preBuildScripts:
+      - name: Validate WuMind gateway selection
+        script: /usr/bin/env python3 -I -B -S "${SRCROOT}/scripts/validate_wumind_gateway_build.py"
+        basedOnDependencyAnalysis: false
+        showEnvVars: false
+        inputFiles:
+          - "$(SRCROOT)/scripts/validate_wumind_gateway_build.py"
     # Main app only. Always refresh from working-tree source before code signing;
     # this generated resource is never committed or copied from a previous build.
     postBuildScripts:
@@ -269,6 +291,14 @@ targets:
         TARGETED_DEVICE_FAMILY: "1,2"
 
 schemes:
+  WuMindTesting:
+    build:
+      targets:
+        ShiftReminder: all
+    run:
+      config: Testing
+    archive:
+      config: Testing
   ArenaResourceValidation:
     build:
       targets:
