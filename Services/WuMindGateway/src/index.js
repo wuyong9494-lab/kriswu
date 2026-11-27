@@ -932,6 +932,7 @@ async function handleChatRecovery(request, env) {
       safeToRetry: false,
       recovered: true,
       outputComplete: typeof parsed?.outputComplete === "boolean" ? parsed.outputComplete : null,
+      failureCode: parsed?.failureCode || null,
       reasoning: parsed?.reasoning || "",
       content: parsed?.content || "",
       billing: parsed?.billing || null,
@@ -1069,7 +1070,7 @@ async function handleChatCompletions(request, env, ctx) {
 
     if (reserve.duplicateSettled) {
       const cached = reserve.cachedResponse;
-      if (cached && typeof cached === "object" && (cached.content || cached.reasoning)) {
+      if (cached && typeof cached === "object" && (cached.content || cached.reasoning || cached.failureCode === "model_refused")) {
         const frames = [];
         frames.push(`data: ${JSON.stringify({
           wumind_trace: {
@@ -1090,7 +1091,9 @@ async function handleChatCompletions(request, env, ctx) {
         })}\n\n`);
         if (cached.reasoning) frames.push(`data: ${JSON.stringify({ reasoning: cached.reasoning })}\n\n`);
         if (cached.content) frames.push(`data: ${JSON.stringify({ content: cached.content })}\n\n`);
-        if (cached.outputComplete === false) {
+        if (cached.failureCode === "model_refused") {
+          frames.push(claudeRefusalFrame());
+        } else if (cached.outputComplete === false) {
           frames.push(`data: ${JSON.stringify({ wumind_error: { code: "stream_interrupted", message: "原任务仅保留了已生成片段，不是完整答案。未重新提交。" } })}\n\n`);
         }
         if (cached.billing) frames.push(`data: ${JSON.stringify({ wumind_billing: { ...cached.billing, idempotentReplay: true } })}\n\n`);
@@ -1444,6 +1447,8 @@ async function handleChatCompletions(request, env, ctx) {
         let collectedReasoning = "";
         let clientDisconnected = false;
         let streamAborted = false;
+        let refused = false;
+        let providerReportedUsage = false;
 
         try {
           await writer.write(encoder.encode(`data: ${JSON.stringify(traceFrame)}\n\n`));
@@ -1463,8 +1468,12 @@ async function handleChatCompletions(request, env, ctx) {
                 observeModel(traceFrame, obj.message?.model);
                 if (obj.type === "message_start" && typeof obj.message?.usage?.input_tokens === "number") {
                   promptTokens = obj.message.usage.input_tokens;
-                } else if (obj.type === "message_delta" && typeof obj.usage?.output_tokens === "number") {
-                  completionTokens = obj.usage.output_tokens;
+                } else if (obj.type === "message_delta") {
+                  refused ||= isClaudeRefusal(obj.delta);
+                  if (typeof obj.usage?.output_tokens === "number") {
+                    completionTokens = obj.usage.output_tokens;
+                    providerReportedUsage = true;
+                  }
                 } else if (obj.type === "content_block_delta" && obj.delta) {
                   let reasoning = "";
                   let content = "";
@@ -1492,16 +1501,19 @@ async function handleChatCompletions(request, env, ctx) {
         } catch {
           streamAborted = true;
         } finally {
-          if (collectedContent || collectedReasoning) {
-            if (completionTokens === 0) completionTokens = estimateTokens(collectedContent + collectedReasoning);
+          if (refused && !clientDisconnected) await writer.write(encoder.encode(claudeRefusalFrame())).catch(() => {});
+          if (collectedContent || collectedReasoning || (refused && providerReportedUsage)) {
+            if (completionTokens === 0 && !providerReportedUsage) completionTokens = estimateTokens(collectedContent + collectedReasoning);
             const actualMicros = computeCostMicros(pricingItem, promptTokens, completionTokens, 0);
             const receipt = await settleOrRecordExempt({
               actualMicros,
               promptTokens,
               completionTokens,
               reasoningTokens: 0,
-              note: (clientDisconnected || streamAborted) ? `${sessionTag || "对话"}（中途断线按已生成结算）` : sessionTag,
-              responsePayload: { reasoning: collectedReasoning, content: collectedContent, outputComplete: !clientDisconnected && !streamAborted },
+              note: refused ? "模型拒答 · 上游用量" : (clientDisconnected || streamAborted) ? `${sessionTag || "对话"}（中途断线按已生成结算）` : sessionTag,
+              responsePayload: refused
+                ? { failureCode: "model_refused", outputComplete: false }
+                : { reasoning: collectedReasoning, content: collectedContent, outputComplete: !clientDisconnected && !streamAborted },
             });
             if (!clientDisconnected) {
               if (streamAborted) {
@@ -1533,6 +1545,24 @@ async function handleChatCompletions(request, env, ctx) {
 
     // Backwards-compatible non-streaming JSON fallback if proxy returned application/json
     const data = await res.json();
+    if (isClaudeRefusal(data)) {
+      const frames = [claudeRefusalFrame()];
+      if (typeof data.usage?.output_tokens === "number") {
+        const promptTokens = Number(data.usage.input_tokens ?? fallbackPromptTokens);
+        const completionTokens = data.usage.output_tokens;
+        const receipt = await settleOrRecordExempt({
+          actualMicros: computeCostMicros(pricingItem, promptTokens, completionTokens, 0),
+          promptTokens, completionTokens, reasoningTokens: 0,
+          note: "模型拒答 · 上游用量",
+          responsePayload: { failureCode: "model_refused", outputComplete: false },
+        });
+        frames.push(`data: ${JSON.stringify({ wumind_billing: receipt })}\n\n`);
+      } else {
+        await releaseIfReserved("claude_refused_without_usage");
+      }
+      frames.push("data: [DONE]\n\n");
+      return new Response(frames.join(""), { headers: { "Content-Type": "text/event-stream; charset=utf-8" } });
+    }
     const reasoning = (data.content || []).filter((b) => b.type === "thinking").map((b) => b.thinking || "").join("\n");
     const content = (data.content || []).filter((b) => b.type === "text").map((b) => b.text || "").join("");
     if (!content && !reasoning) {
@@ -4725,3 +4755,11 @@ export default {
 
 export { executeDueCloudSchedules, computeNextScheduleEpoch, formatEpochInTimezone };
 
+
+function isClaudeRefusal(payload) {
+  return payload?.stop_reason === "refusal" || payload?.stop_details?.type === "refusal";
+}
+
+function claudeRefusalFrame() {
+  return `data: ${JSON.stringify({ wumind_error: { code: "model_refused", message: "Claude 拒绝了本次请求，未自动重发或切换模型。" } })}\n\n`;
+}

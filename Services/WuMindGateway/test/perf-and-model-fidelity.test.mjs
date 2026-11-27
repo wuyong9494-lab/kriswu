@@ -155,6 +155,21 @@ async function runTests() {
     // 2. Claude Messages API TRUE SSE streaming
     if (u.includes("/v1/messages")) {
       assert.equal(body.stream, true, "Gateway MUST request stream: true from Claude Messages API");
+      const input = body.messages?.at(-1)?.content;
+      const refusal = { stop_reason: "refusal", stop_details: {type: "refusal", category: "reasoning_extraction"} };
+      if (input === "test:claude-refusal-json") {
+        return Response.json({ ...refusal, content: [], usage: { input_tokens: 2195, output_tokens: 146 } });
+      }
+      if (input === "test:claude-refusal") {
+        const frame = (obj) => `data: ${JSON.stringify(obj)}\n\n`;
+        return new Response(makeDelayedSSE([
+          frame({type: "message_start", message: {usage: {input_tokens: 2195}}}),
+          frame({type: "content_block_delta", delta: {type: "thinking_delta", thinking: "partial thought"}}),
+          frame({type: "message_delta", delta: refusal, usage: {output_tokens: 146}}),
+          frame({type: "message_stop"}),
+        ], 1), {headers: {"Content-Type": "text/event-stream"}});
+      }
+
       const chunks = [
         `event: message_start\ndata: ${JSON.stringify({ type: "message_start", message: { usage: { input_tokens: 150 } } })}\n\n`,
         `event: content_block_delta\ndata: ${JSON.stringify({ type: "content_block_delta", delta: { type: "thinking_delta", thinking: "ClaudeThinking..." } })}\n\n`,
@@ -411,6 +426,30 @@ async function runTests() {
     assert.equal(partialRecovery.content, "Only the first part.");
     assert.equal(partialRecovery.safeToRetry, false);
     assert.equal(capturedUpstreamCalls.length, callsAfterPartial, "Status lookup must not repeat the model call");
+
+    for (const suffix of ["", "-json"]) {
+      const refusalID = `req-claude-refusal${suffix}`;
+      const input = {
+        model: "claude-sonnet-4-20250514",
+        messages: [{role: "user", content: `test:claude-refusal${suffix}`}],
+      };
+      const headers = {...auth, "Idempotency-Key": refusalID};
+      const attempt = await call("POST", "/v1/chat/completions", input, headers);
+      const refusedWire = await attempt.res.text();
+      assert.match(refusedWire, /"code":"model_refused"/);
+      assert.match(refusedWire, /"completionTokens":146/);
+      await Promise.all(attempt.waitPromises);
+      const callCount = capturedUpstreamCalls.length;
+      const recovered = await (await call("GET", `/v1/chat/recovery?clientRequestID=${refusalID}`, null, auth)).res.json();
+      assert.equal(recovered.failureCode, "model_refused");
+      assert.equal(recovered.outputComplete, false);
+      assert.equal(recovered.content, "");
+      assert.equal(recovered.reasoning, "");
+      assert.equal(recovered.safeToRetry, false);
+      const replay = await call("POST", "/v1/chat/completions", input, headers);
+      assert.match(await replay.res.text(), /"code":"model_refused"/);
+      assert.equal(capturedUpstreamCalls.length, callCount, "Refusals must not reach the upstream again on recovery or replay");
+    }
 
     // Unknown task -> safeToRetry: true
     const recMissing = await (await call("GET", "/v1/chat/recovery?clientRequestID=never-sent-xyz", null, auth)).res.json();

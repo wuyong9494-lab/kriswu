@@ -176,7 +176,7 @@ public enum AIProviderStreamEvent: Equatable, Sendable {
 public enum MultiProviderAIError: LocalizedError, Equatable, Sendable {
     case missingKey, invalidRequest, invalidCredential, forbidden, quota, rateLimited
     case unavailable, unsupportedModel, invalidResponse, invalidCatalog, noAnswer, replyIncomplete
-    case timedOut, networkError, redirectBlocked, requestRejected(Int)
+    case timedOut, networkError, redirectBlocked, requestRejected(Int), modelRefused
 
     public var errorDescription: String? {
         switch self {
@@ -191,6 +191,7 @@ public enum MultiProviderAIError: LocalizedError, Equatable, Sendable {
         case .invalidResponse: return "服务商返回了无法读取的响应。"
         case .invalidCatalog: return "未能完整读取服务商的模型目录，请重试。"
         case .noAnswer: return "服务商没有返回可显示的文字回答。"
+        case .modelRefused: return "模型拒绝了本次请求，未自动重发或切换模型。"
         case .replyIncomplete: return "服务商未完整生成回答，请缩短问题或重试。"
         case .timedOut: return "连接服务商超时，请重试。"
         case .networkError: return "无法连接所选 AI 服务商，请检查网络。"
@@ -250,6 +251,11 @@ public struct AIProviderDiagnosticError: LocalizedError, Equatable, Sendable {
         self.sanitizedDetail = sanitizedDetail
     }
 
+    public var isDisabledAPIKey: Bool {
+        guard underlying == .invalidCredential || underlying == .forbidden else { return false }
+        return sanitizedDetail?.localizedCaseInsensitiveContains("this key is not enabled") == true
+    }
+
     public var shortBadgeSummary: String {
         var parts: [String] = [host]
         if let httpStatus {
@@ -265,6 +271,9 @@ public struct AIProviderDiagnosticError: LocalizedError, Equatable, Sendable {
         var head = underlying.errorDescription ?? "请求失败。"
         if underlying == .invalidCredential {
             head = "服务商拒绝了该 API Key（鉴权失败）。若使用中转站 Key 请核对自定义接口地址；若使用官方 Key 请检查接口地址是否留空或 Key 是否已撤销。"
+        }
+        if isDisabledAPIKey {
+            head = "服务商已停用此 API Key。请在服务商后台核对状态或联系支持，不要重复发送。"
         }
         var meta: [String] = ["请求域名：\(host)"]
         if let httpStatus {
@@ -723,6 +732,20 @@ public struct MultiProviderAIClient: Sendable {
         return parseSSEObject(provider: provider, object: obj)
     }
 
+    static func isExplicitModelRefusal(provider: AIProvider, frame: [String: Any]) -> Bool {
+        if provider == .claude, frame["type"] as? String == "message_delta",
+           let delta = frame["delta"] as? [String: Any] {
+            return delta["stop_reason"] as? String == "refusal"
+                || (delta["stop_details"] as? [String: Any])?["type"] as? String == "refusal"
+        }
+        if provider == .openAI || provider == .grok,
+           let choices = frame["choices"] as? [[String: Any]], let first = choices.first {
+            return first["finish_reason"] as? String == "refusal"
+                || first["finish_reason"] as? String == "content_filter"
+        }
+        return false
+    }
+
     private static func sseObject(_ rawLine: String) -> [String: Any]? {
         let trimmed = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.hasPrefix("data:") else { return nil }
@@ -999,6 +1022,7 @@ public struct MultiProviderAIClient: Sendable {
         var reasoningBuf = ""
         var contentBuf = ""
         var hasYieldedAnyToken = false
+        var modelRefused = false
         var reportedModels = Set<String>()
         do {
             for try await rawLine in bytes.lines {
@@ -1007,6 +1031,10 @@ public struct MultiProviderAIClient: Sendable {
                 if reportedModels.count < 2, let reported = Self.reportedModel(provider: provider, object: obj),
                    reportedModels.insert(reported).inserted {
                     continuation.yield(.reportedModel(reported))
+                }
+                if Self.isExplicitModelRefusal(provider: provider, frame: obj) {
+                    modelRefused = true
+                    break
                 }
                 let parsed = Self.parseSSEObject(provider: provider, object: obj)
                 if let r = parsed.reasoning, !r.isEmpty {
@@ -1034,6 +1062,9 @@ public struct MultiProviderAIClient: Sendable {
             throw error
         }
 
+        if modelRefused {
+            throw AIProviderDiagnosticError(underlying: .modelRefused, host: host, httpStatus: status, errorCode: "model_refused")
+        }
         let trimmedContent = contentBuf.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedReasoning = reasoningBuf.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmedContent.isEmpty && !trimmedReasoning.isEmpty {
@@ -1238,6 +1269,9 @@ public struct MultiProviderAIClient: Sendable {
         let response = try await readDiagnosed(ChatCompletionsReply.self, provider: provider, path: "/v1/chat/completions",
                                                key: apiKey, body: payload, baseURL: baseURL)
         guard let choice = response.choices.first else { throw MultiProviderAIError.noAnswer }
+        if choice.finishReason == "refusal" || choice.finishReason == "content_filter" {
+            throw MultiProviderAIError.modelRefused
+        }
         let rawAnswer = choice.message?.resolvedText ?? ""
         let rawThought = choice.message?.reasoningContent ?? choice.message?.reasoning ?? ""
         let trimmedThought = rawThought.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1267,6 +1301,7 @@ public struct MultiProviderAIClient: Sendable {
         }
         let response = try await readDiagnosed(ClaudeReply.self, provider: .claude, path: "/v1/messages",
                                                key: apiKey, body: payload, baseURL: baseURL)
+        if response.stopReason == "refusal" { throw MultiProviderAIError.modelRefused }
         let thought = response.content.compactMap { $0.type == "thinking" ? $0.thinking : nil }
             .joined(separator: "\n\n").trimmingCharacters(in: .whitespacesAndNewlines)
         let answer: String

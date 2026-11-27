@@ -45,6 +45,42 @@ final class WuMindGatewayAndAttachmentTests: XCTestCase {
         ])
     }
 
+    func testExplicitProviderRefusalsAreNotNormalEndTurns() {
+        XCTAssertTrue(MultiProviderAIClient.isExplicitModelRefusal(provider: .claude, frame: [
+            "type": "message_delta", "delta": ["stop_reason": "refusal"],
+        ]))
+        XCTAssertTrue(MultiProviderAIClient.isExplicitModelRefusal(provider: .openAI, frame: [
+            "choices": [["finish_reason": "content_filter"]],
+        ]))
+        XCTAssertFalse(MultiProviderAIClient.isExplicitModelRefusal(provider: .claude, frame: [
+            "type": "message_delta", "delta": ["stop_reason": "end_turn"],
+        ]))
+    }
+
+    func testGatewayRefusalThrowsAfterDeliveringBillingWithoutSuccessfulCompletion() async {
+        let client = WuMindGatewayClient(
+            dataTransport: { _ in fatalError("Not expected") },
+            streamTransport: { _, status, line in
+                try status(200)
+                try await line(#"data: {"wumind_error":{"code":"model_refused","message":"Claude refused"}}"#)
+                try await line(#"data: {"wumind_billing":{"promptTokens":2195,"completionTokens":146,"reasoningTokens":0,"costYuan":0.1,"balanceYuan":19.9}}"#)
+                try await line("data: [DONE]")
+            }
+        )
+        var events: [WuMindGatewayClient.StreamEvent] = []
+        do {
+            for try await event in client.streamChat(
+                gatewayURL: "https://api.wumind.test", userToken: "test", modelID: "claude-test",
+                messages: [.init(role: .user, text: "test")], systemPrompt: nil, deepThinking: false
+            ) { events.append(event) }
+            XCTFail("Refusals cannot end as success")
+        } catch {
+            XCTAssertEqual(error as? WuMindGatewayClient.GatewayError, .modelRefused)
+        }
+        XCTAssertEqual(events, [.billing(.init(promptTokens: 2195, completionTokens: 146, reasoningTokens: 0,
+                                               costYuan: 0.1, balanceYuan: 19.9))])
+    }
+
     func testGatewayReturnsInsufficientBalanceOnHTTP402() async {
         let client = WuMindGatewayClient(
             dataTransport: { _ in fatalError("Not expected") },

@@ -2901,6 +2901,22 @@ final class WuMindStore: ObservableObject {
                     self.lastUpstreamBalanceNotice = upMsg
                 }
 
+                let modelRefused = (error as? WuMindGatewayClient.GatewayError) == .modelRefused
+                    || (error as? MultiProviderAIError) == .modelRefused
+                    || (error as? AIProviderDiagnosticError)?.underlying == .modelRefused
+                if modelRefused {
+                    self.pendingAnswer = ""
+                    self.pendingReasoning = ""
+                    self.pendingCallTrace?.succeeded = false
+                    self.pendingCallTrace?.failureCode = "model_refused"
+                    self.mutateTurn(conversationID: convoID, turnID: turnID, persist: false) {
+                        $0.failureStage = "上游模型拒答"
+                    }
+                    self.finishGeneration(conversationID: convoID, turnID: turnID,
+                                          state: .failed("模型拒绝了本次请求，未自动重发或切换模型。"))
+                    return
+                }
+
                 // Network-drop safe recovery: before marking a managed request failed,
                 // query the original clientRequestID so settled answers recover with ¥0 extra charge
                 // and in-progress requests NEVER trigger duplicate submission.
@@ -2939,6 +2955,17 @@ final class WuMindStore: ObservableObject {
                                     item.costYuan = cost
                                 }
                             }
+                            if rec.failureCode == "model_refused" {
+                                self.pendingAnswer = ""
+                                self.pendingReasoning = ""
+                                self.pendingCallTrace?.failureCode = "model_refused"
+                                self.mutateTurn(conversationID: convoID, turnID: turnID, persist: false) {
+                                    $0.failureStage = "上游模型拒答"
+                                }
+                                self.finishGeneration(conversationID: convoID, turnID: turnID,
+                                                      state: .failed("原任务被模型拒绝，未重新提交。"))
+                                return
+                            }
                             if rec.outputComplete == false {
                                 self.pendingCallTrace?.failureCode = "stream_interrupted_partial"
                                 self.mutateTurn(conversationID: convoID, turnID: turnID, persist: false) {
@@ -2976,7 +3003,9 @@ final class WuMindStore: ObservableObject {
                 let message = (hadPartialOutput && !rawMessage.contains("已保留"))
                     ? "\(rawMessage)（已保留已收到片段，不会自动重发以防重复计费）"
                     : rawMessage
-                self.pendingCallTrace?.failureCode = (error as? AIProviderDiagnosticError)?.errorCode ?? "stream_error"
+                let diagnostic = error as? AIProviderDiagnosticError
+                self.pendingCallTrace?.failureCode = diagnostic?.isDisabledAPIKey == true
+                    ? "provider_key_disabled" : diagnostic?.errorCode ?? "stream_error"
                 self.mutateTurn(conversationID: convoID, turnID: turnID, persist: false) { item in
                     item.failureStage = hadPartialOutput ? "流式接收中途中断（未自动重发）" : currentStage
                 }
@@ -3058,13 +3087,23 @@ final class WuMindStore: ObservableObject {
                     item.callTrace?.succeeded = rec.outputComplete != false
                     item.callTrace?.failureCode = rec.outputComplete == false ? "stream_interrupted_partial" : nil
                     item.failureStage = rec.outputComplete == false ? "原任务中断 · 仅恢复片段" : nil
-                    if rec.outputComplete == false {
+                    if rec.failureCode == "model_refused" {
+                        item.answer = ""
+                        item.reasoning = ""
+                        item.callTrace?.failureCode = "model_refused"
+                        item.failureStage = "上游模型拒答"
+                        item.state = .failed("原任务被模型拒绝，未重新提交。")
+                        item.modelCapabilityBadge = "上游模型拒答"
+                    } else if rec.outputComplete == false {
                         item.state = .failed("已保留原任务生成的片段。这不是完整答案，未重新提交。")
                         item.modelCapabilityBadge = "原任务仅恢复片段"
                     } else if !item.answer.isEmpty || !item.reasoning.isEmpty {
                         item.state = .complete
                         item.modelCapabilityBadge = "原任务已恢复"
                     }
+                }
+                if rec.failureCode == "model_refused" {
+                    return "原任务被模型拒绝，未重新提交。"
                 }
                 if rec.outputComplete == false {
                     return "已保留原任务生成的片段，不是完整答案。未重新提交。"

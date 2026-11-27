@@ -3055,6 +3055,7 @@ private struct WuMindTurnView: View, Equatable {
                         }
                     }
                 case .failed(let message):
+                    let terminalProviderFailure = ["model_refused", "provider_key_disabled"].contains(turn.callTrace?.failureCode ?? "")
                     VStack(alignment: .leading, spacing: 8) {
                         if let stage = turn.failureStage, !stage.isEmpty {
                             HStack(spacing: 5) {
@@ -3073,7 +3074,7 @@ private struct WuMindTurnView: View, Equatable {
                         Label(message, systemImage: "exclamationmark.triangle.fill")
                             .font(.footnote)
                             .foregroundStyle(DS.Palette.danger)
-                        if let onRecoverTask {
+                        if let onRecoverTask, !terminalProviderFailure {
                             Button("查询原任务结果（不重提）", action: onRecoverTask)
                                 .font(.caption.weight(.bold))
                                 .buttonStyle(.borderedProminent)
@@ -3082,11 +3083,13 @@ private struct WuMindTurnView: View, Equatable {
                         }
                         if isLast {
                             HStack(spacing: 8) {
-                                Button("立即重试发送", action: onRegenerate)
-                                    .font(.caption.weight(.bold))
-                                    .buttonStyle(.borderedProminent)
-                                    .tint(.indigo)
-                                    .accessibilityIdentifier("wumind.turn.retryNow")
+                                if !terminalProviderFailure {
+                                    Button("立即重试发送", action: onRegenerate)
+                                        .font(.caption.weight(.bold))
+                                        .buttonStyle(.borderedProminent)
+                                        .tint(.indigo)
+                                        .accessibilityIdentifier("wumind.turn.retryNow")
+                                }
                                 Button("放回输入框") { onRetryPrompt(turn.question) }
                                     .font(.caption.weight(.semibold))
                                     .buttonStyle(.bordered)

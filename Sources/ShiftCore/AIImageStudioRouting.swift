@@ -635,7 +635,7 @@ public enum AIImageErrorClassifier {
                     httpStatus: nil,
                     isRetryableWithSameIdempotencyKey: true
                 )
-            case .invalidResponse, .objectStorageUnconfigured, .serverMessage:
+            case .invalidResponse, .objectStorageUnconfigured, .serverMessage, .modelRefused:
                 return AIImageClassifiedError(
                     category: .apiError,
                     title: "接口错误",

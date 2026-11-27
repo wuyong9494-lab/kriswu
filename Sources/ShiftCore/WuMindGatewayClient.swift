@@ -674,6 +674,7 @@ public struct WuMindChatRecoveryResponse: Codable, Equatable, Sendable {
     public let safeToRetry: Bool
     public let recovered: Bool?
     public let outputComplete: Bool?
+    public let failureCode: String?
     public let reasoning: String?
     public let content: String?
     public let billing: WuMindBillingReceipt?
@@ -702,6 +703,7 @@ public struct WuMindGatewayClient: Sendable {
         case insufficientBalance
         case modelNotEnabled(String)
         case upstreamAuthFailed(String)
+        case modelRefused
         case upstreamBalanceInsufficient(String)
         case objectStorageUnconfigured(String)
         case serverMessage(String)
@@ -718,6 +720,8 @@ public struct WuMindGatewayClient: Sendable {
                 return "WUMIND 内置通道余额不足，请先充值或输入兑换码。"
             case .modelNotEnabled(let msg):
                 return msg
+            case .modelRefused:
+                return "Claude 拒绝了本次请求，未自动重发或切换模型。"
             case .upstreamAuthFailed(let msg):
                 return msg
             case .upstreamBalanceInsufficient(let msg):
@@ -872,6 +876,7 @@ public struct WuMindGatewayClient: Sendable {
                         await parser.consume(line)
                     })
                     try Task.checkCancellation()
+                    if await parser.modelRefused { throw GatewayError.modelRefused }
                     continuation.finish()
                 } catch is CancellationError {
                     continuation.finish(throwing: CancellationError())
@@ -1385,6 +1390,7 @@ public struct WuMindGatewayClient: Sendable {
     }
 
     private actor SSECollector {
+        private(set) var modelRefused = false
         let continuation: AsyncThrowingStream<StreamEvent, Error>.Continuation
 
         init(continuation: AsyncThrowingStream<StreamEvent, Error>.Continuation) {
@@ -1410,7 +1416,9 @@ public struct WuMindGatewayClient: Sendable {
             if let receipt = frame.wumind_billing {
                 continuation.yield(.billing(receipt))
             }
-            if let warn = frame.wumind_error?.message, !warn.isEmpty {
+            if frame.wumind_error?.code == "model_refused" {
+                modelRefused = true
+            } else if let warn = frame.wumind_error?.message, !warn.isEmpty {
                 continuation.yield(.warning(warn))
             }
         }
