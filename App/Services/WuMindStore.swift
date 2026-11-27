@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import SwiftUI
 import UIKit
@@ -600,18 +601,19 @@ final class WuMindStreamBuffer: ObservableObject {
         case warning
     }
 
-    @Published var reasoning: String = ""
-    @Published var answer: String = ""
-    @Published var reasoningSeconds: Double? = nil
-    @Published var agentSteps: [WuMindAgentStep] = []
-    @Published var activeAgentPhase: String? = nil
-    @Published var inlineStatusKind: InlineStatusKind? = nil
-    @Published var inlineStatusText: String? = nil
-    @Published var inlineIntroLead: String? = nil
-    @Published var liveWebCitations: [WuMindWebCitation] = []
-    @Published var liveAgentCitations: [WuMindAgentCitation] = []
-    @Published var liveToolFailures: [WuMindToolFailureNotice] = []
-    @Published var liveElapsedSeconds: Int = 0
+    var reasoning: String = ""
+    var answer: String = ""
+    var reasoningSeconds: Double? = nil
+    var agentSteps: [WuMindAgentStep] = []
+    var activeAgentPhase: String? = nil
+    var inlineStatusKind: InlineStatusKind? = nil
+    var inlineStatusText: String? = nil
+    var inlineIntroLead: String? = nil
+    var liveWebCitations: [WuMindWebCitation] = []
+    var liveAgentCitations: [WuMindAgentCitation] = []
+    var liveToolFailures: [WuMindToolFailureNotice] = []
+    var liveElapsedSeconds: Int = 0
+    let answerLayoutChanges = PassthroughSubject<Void, Never>()
     @Published var tick: UInt64 = 0
 
     func reset() {
@@ -3317,6 +3319,7 @@ final class WuMindStore: ObservableObject {
             ))
         }
         streamBuffer.liveWebCitations = pendingWebCitations
+        streamBuffer.tick &+= 1
     }
 
     private func performVerifiedWebSearch(
@@ -3914,10 +3917,12 @@ final class WuMindStore: ObservableObject {
 
                 // Monotonic 1Hz thinking/connecting clock independent of streamDirty so timer NEVER stalls
                 // even during quiet upstream TTFT or reasoning-only pauses inside LazyVStack.
+                var clockChanged = false
                 if let started = self.thinkingStartedAt {
                     let sec = max(1, Int(Date().timeIntervalSince(started).rounded(.down)) + 1)
                     if self.streamBuffer.liveElapsedSeconds != sec {
                         self.streamBuffer.liveElapsedSeconds = sec
+                        clockChanged = true
                     }
                 }
 
@@ -3928,6 +3933,7 @@ final class WuMindStore: ObservableObject {
                        let started = self.generationStartedAt {
                         self.pendingFirstRenderMs = max(1, Int(Date().timeIntervalSince(started) * 1000))
                     }
+                    let answerChanged = self.streamBuffer.answer.utf8.count != self.pendingAnswer.utf8.count
                     self.streamBuffer.reasoning = self.pendingReasoning
                     self.streamBuffer.answer = self.pendingAnswer
                     self.streamBuffer.reasoningSeconds = self.pendingReasoningSeconds
@@ -3939,6 +3945,9 @@ final class WuMindStore: ObservableObject {
                     self.streamBuffer.liveWebCitations = self.pendingWebCitations
                     self.streamBuffer.liveAgentCitations = self.pendingAgentCitations
                     self.streamBuffer.liveToolFailures = self.pendingToolFailures
+                    self.streamBuffer.tick &+= 1
+                    if answerChanged { self.streamBuffer.answerLayoutChanges.send() }
+                } else if clockChanged {
                     self.streamBuffer.tick &+= 1
                 }
             }

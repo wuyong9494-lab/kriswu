@@ -1,3 +1,4 @@
+import Combine
 import PhotosUI
 import SwiftUI
 import UIKit
@@ -65,12 +66,7 @@ private final class WuMindComposerDraftState: ObservableObject {
     }
 }
 
-private struct WuMindBottomAnchorYKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
-    }
-}
+
 
 /// Flagship multi-model AI aggregator workspace ("WUMIND").
 /// Presented full-screen without the bottom duty tab bar; supports dual channels
@@ -826,6 +822,19 @@ struct WuMindWorkspaceView: View {
     }
 
     private func handleWorkspaceAppear() {
+        #if DEBUG
+        if AppStore.isDemo, ProcessInfo.processInfo.arguments.contains("-wumind-transcript-qa"),
+           temporaryTurns.isEmpty {
+            isTemporaryChat = true
+            let detail = Array(repeating: "长回复测试段落，使用固定文字，不发出任何模型请求。", count: 65).joined(separator: "\n\n")
+            temporaryTurns = [WuMindTurn(
+                question: "检查对话折叠", reasoning: "此文本只用于验证思考折叠。",
+                reasoningSeconds: 3, answer: "# 测试回答\n\n" + detail,
+                modelLabel: "WuMind 界面样例", provider: .deepSeek, isDeepThinking: true, state: .complete
+            )]
+            return
+        }
+        #endif
         if regNameDraft.isEmpty {
             let candidate = AppAccountManager.shared.externalProfile?.nickname
                 ?? AppStore.shared.myRosterName
@@ -1283,25 +1292,12 @@ struct WuMindWorkspaceView: View {
                         Color.clear
                             .frame(height: 8)
                             .id(bottomAnchor)
-                            .background(
-                                GeometryReader { anchorGeo in
-                                    Color.clear.preference(
-                                        key: WuMindBottomAnchorYKey.self,
-                                        value: anchorGeo.frame(in: .named("wumind.chat.scroll")).minY
-                                    )
-                                }
-                            )
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 12)
                     .padding(.bottom, 16)
                     .frame(maxWidth: 760)
                     .frame(maxWidth: .infinity)
-                }
-                .coordinateSpace(name: "wumind.chat.scroll")
-                .onPreferenceChange(WuMindBottomAnchorYKey.self) { minY in
-                    let distanceBelow = Double(minY - viewportGeo.size.height)
-                    scrollFollow.handleBottomDistance(distanceBelow, isGenerating: generatingInCurrentConversation)
                 }
                 .scrollDismissesKeyboard(.immediately)
                 .contentShape(Rectangle())
@@ -1312,17 +1308,20 @@ struct WuMindWorkspaceView: View {
                 })
                 .simultaneousGesture(
                     DragGesture(minimumDistance: 8).onChanged { value in
-                        // Immediately detach auto-follow the moment user begins dragging upward
-                        scrollFollow.handleUserDrag(
-                            translationY: Double(value.translation.height),
-                            isGenerating: generatingInCurrentConversation
-                        )
+                        let dy = value.translation.height
+                        guard dy > abs(value.translation.width) else { return }
+                        var next = scrollFollow
+                        next.handleUserDrag(translationY: Double(dy), isGenerating: generatingInCurrentConversation)
+                        if next != scrollFollow { scrollFollow = next }
                     }
                 )
                 .background {
                     if generatingInCurrentConversation && scrollFollow.shouldAutoScrollOnStreamTick {
                         WuMindScrollFollower(streamBuffer: store.streamBuffer) {
-                            scroller.scrollTo(bottomAnchor, anchor: .bottom)
+                            guard scrollFollow.shouldAutoScrollOnStreamTick else { return }
+                            var transaction = Transaction()
+                            transaction.disablesAnimations = true
+                            withTransaction(transaction) { scroller.scrollTo(bottomAnchor, anchor: .bottom) }
                         }
                     }
                 }
@@ -2587,21 +2586,17 @@ private struct WuMindIsolatedComposerBar: View {
     }
 }
 
-/// Isolated scroll follower observing ONLY `WuMindStreamBuffer.tick` at throttled cadence (~6 Hz)
-/// so the parent `WuMindWorkspaceView` and previous turns never re-evaluate during streaming.
+/// Scrolling follows material answer growth, not timer/reasoning ticks.
 private struct WuMindScrollFollower: View {
-    @ObservedObject var streamBuffer: WuMindStreamBuffer
+    let streamBuffer: WuMindStreamBuffer
     let onScrollToBottom: () -> Void
 
     var body: some View {
         Color.clear
             .frame(width: 0, height: 0)
-            .onChange(of: streamBuffer.tick) { tick in
-                // Throttle auto-scroll to every 2nd coalesced flush (~160ms) to keep 60 FPS smooth scrolling
-                if tick.isMultiple(of: 2) {
-                    onScrollToBottom()
-                }
-            }
+            .onReceive(streamBuffer.answerLayoutChanges.throttle(
+                for: .milliseconds(210), scheduler: RunLoop.main, latest: true
+            )) { _ in onScrollToBottom() }
     }
 }
 
@@ -2751,7 +2746,8 @@ private struct WuMindTurnView: View, Equatable {
     }
 
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    @State private var thinkingExpanded = true
+    @State private var thinkingExpanded = false
+    @State private var answerExpansionOverride: Bool?
     @State private var showingPrimaryInCompactCompare = false
 
     private var isCurrentlyThinking: Bool {
@@ -2834,13 +2830,7 @@ private struct WuMindTurnView: View, Equatable {
                 }
 
                 if !turn.answer.isEmpty {
-                    WuMindMarkdownView(
-                        text: turn.answer,
-                        isStreaming: isGenerating && streamSmoothMode,
-                        elevatedSurface: elevatedSurface,
-                        subtleBorder: subtleBorder,
-                        onCopyCode: onCopy
-                    )
+                    answerBlock
                 }
 
                 // Structured Persisted Citations (Web Sources + Separate Agent Citations) & Honest Tool Failure Notice
@@ -3227,12 +3217,43 @@ private struct WuMindTurnView: View, Equatable {
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(compProvider.brandColor.opacity(0.28), lineWidth: 1))
     }
 
+    private var answerBlock: some View {
+        let longAnswer = WuMindTranscriptPresentation.shouldFoldAnswer(turn.answer)
+        let expanded = answerExpansionOverride ?? !longAnswer
+        return VStack(alignment: .leading, spacing: 8) {
+            Button {
+                answerExpansionOverride = !expanded
+            } label: {
+                Label(expanded ? "收起回复" : "展开回复", systemImage: expanded ? "chevron.up" : "chevron.down")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, 5)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("wumind.answer.toggle")
+            .accessibilityValue(expanded ? "已展开" : "已收起")
+            if expanded {
+                WuMindMarkdownView(
+                    text: turn.answer,
+                    isStreaming: isGenerating && (streamSmoothMode || longAnswer),
+                    elevatedSurface: elevatedSurface,
+                    subtleBorder: subtleBorder,
+                    onCopyCode: onCopy
+                )
+                .accessibilityIdentifier("wumind.answer.full")
+            } else {
+                Text(WuMindTranscriptPresentation.answerPreview(turn.answer))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
+                    .accessibilityIdentifier("wumind.answer.preview")
+            }
+        }
+    }
+
     private var thinkingBlock: some View {
         VStack(alignment: .leading, spacing: 8) {
             Button {
-                withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) {
-                    thinkingExpanded.toggle()
-                }
+                thinkingExpanded.toggle()
             } label: {
                 HStack(spacing: 6) {
                     if isCurrentlyThinking {
@@ -3262,6 +3283,7 @@ private struct WuMindTurnView: View, Equatable {
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("wumind.thinking.toggle")
+            .accessibilityValue(thinkingExpanded ? "已展开" : "已收起")
 
             if thinkingExpanded {
                 HStack(alignment: .top, spacing: 10) {
@@ -3344,12 +3366,6 @@ private struct WuMindMarkdownView: View {
     let subtleBorder: Color
     let onCopyCode: (String) -> Void
 
-    private struct Block: Identifiable {
-        let id: Int
-        let language: String?
-        let content: String
-    }
-
     private enum RichSegmentKind {
         case divider
         case heading(level: Int, text: String)
@@ -3366,16 +3382,11 @@ private struct WuMindMarkdownView: View {
 
     var body: some View {
         if isStreaming {
-            let blocks = parseBlocks(text)
-            VStack(alignment: .leading, spacing: 11) {
-                ForEach(blocks) { block in
-                    if let lang = block.language {
-                        codeCard(language: lang, code: block.content, selectable: false)
-                    } else {
-                        streamingProseView(block.content)
-                    }
-                }
-            }
+            Text(text)
+                .font(.body)
+                .foregroundStyle(.primary)
+                .lineSpacing(5)
+                .frame(maxWidth: .infinity, alignment: .leading)
         } else {
             let segments = WuMindRichSegmentCache.segments(for: text)
             VStack(alignment: .leading, spacing: 12) {
@@ -3472,21 +3483,6 @@ private struct WuMindMarkdownView: View {
 
     /// Zero-jank streaming renderer: groups text into ~1,200-char chunks using native `Text` without
     /// running O(N^2) `AttributedString(markdown:)` or `textSelection` layout on every incoming delta.
-    private func streamingProseView(_ raw: String) -> some View {
-        let chunks = chunkForStreaming(raw)
-        return VStack(alignment: .leading, spacing: 10) {
-            ForEach(Array(chunks.enumerated()), id: \.offset) { _, chunk in
-                Text(chunk)
-                    .font(.system(size: 15.8))
-                    .lineSpacing(6)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    /// Completed-message flagship editorial renderer: Apple/Claude-grade typographic hierarchy,
-    /// generous line rhythm, numbered pills, accented headings, and soft blockquote cards.
     private func richProseView(_ raw: String) -> some View {
         let segments = parseRichSegments(raw)
         return VStack(alignment: .leading, spacing: 10) {
@@ -3658,31 +3654,7 @@ private struct WuMindMarkdownView: View {
         return Text(source)
     }
 
-    private func parseBlocks(_ source: String) -> [Block] {
-        var result: [Block] = []
-        var language: String?
-        var lines: [Substring] = []
-        for line in source.split(separator: "\n", omittingEmptySubsequences: false) {
-            let marker = line.trimmingCharacters(in: .whitespaces)
-            if language == nil, marker.hasPrefix("```"), !marker.dropFirst(3).contains("`") {
-                if !lines.isEmpty {
-                    result.append(Block(id: result.count, language: nil, content: lines.joined(separator: "\n")))
-                }
-                lines.removeAll(keepingCapacity: true)
-                language = String(marker.dropFirst(3).prefix(24)).trimmingCharacters(in: .whitespaces)
-            } else if language != nil, marker == "```" {
-                result.append(Block(id: result.count, language: language, content: lines.joined(separator: "\n")))
-                lines.removeAll(keepingCapacity: true)
-                language = nil
-            } else {
-                lines.append(line)
-            }
-        }
-        if !lines.isEmpty {
-            result.append(Block(id: result.count, language: language, content: lines.joined(separator: "\n")))
-        }
-        return result
-    }
+
 }
 
 // MARK: - Flagship Multi-Provider Model, Verification & Capability Center

@@ -66,7 +66,7 @@ enum WuMindChatBuildService {
             }
             guard let model = store.enabledManagedVideoModels.first else { throw BuildError.unavailable("内置目录没有开通视频模型。") }
             let params = model.supportedParams
-            let seconds = Int(params?.defaultSeconds ?? "") ?? 5
+            let seconds = params?.defaultSeconds ?? params?.seconds?.first ?? 5
             let size = params?.defaultSize ?? params?.sizes?.first ?? "1280x720"
             return .managedVideo(model, gateway, seconds, size)
         }

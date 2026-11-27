@@ -48,6 +48,7 @@ jobs:
           xcodebuild test -project ShiftReminder.xcodeproj -scheme ArenaFlow \
             -destination "id=$DEVICE" -parallel-testing-enabled NO \
             -only-testing:ArenaFlowTests/DeepSeekChatNavigationTests/testWuMindCleanLayoutAndToolSearch \
+            -only-testing:ArenaFlowTests/DeepSeekChatNavigationTests/testWuMindTranscriptDefaultsToFoldedAndCanScroll \
             -resultBundlePath wumind-layout.xcresult CODE_SIGNING_ALLOWED=NO \
             | tee wumind-layout.log | tail -n 100
       - name: Extract layout proof

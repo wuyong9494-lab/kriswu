@@ -9,6 +9,35 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         }
     }
 
+    func testWuMindTranscriptDefaultsToFoldedAndCanScroll() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-demo", "-screen", "wumind", "-wumind-transcript-qa"]
+        ensurePortrait()
+        app.launch()
+        defer { app.terminate() }
+
+        let thinking = app.buttons["wumind.thinking.toggle"]
+        let answer = app.buttons["wumind.answer.toggle"]
+        XCTAssertTrue(thinking.waitForExistence(timeout: 12))
+        XCTAssertEqual(thinking.value as? String, "已收起")
+        XCTAssertEqual(answer.value as? String, "已收起")
+        XCTAssertTrue(app.staticTexts["wumind.answer.preview"].exists)
+        thinking.tap()
+        XCTAssertEqual(thinking.value as? String, "已展开")
+        thinking.tap()
+        XCTAssertEqual(thinking.value as? String, "已收起")
+        answer.tap()
+        XCTAssertEqual(answer.value as? String, "已展开")
+        XCTAssertFalse(app.staticTexts["wumind.answer.preview"].exists)
+        app.swipeUp()
+        app.swipeDown()
+        for _ in 0..<3 where !answer.isHittable { app.swipeDown() }
+        XCTAssertTrue(answer.isHittable)
+        answer.tap()
+        XCTAssertEqual(answer.value as? String, "已收起")
+    }
+
     func testWuMindCleanLayoutAndToolSearch() {
         continueAfterFailure = false
         let app = XCUIApplication()
