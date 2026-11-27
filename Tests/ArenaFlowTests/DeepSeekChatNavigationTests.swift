@@ -906,16 +906,16 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         let planButton = app.buttons["today.workbench.plan"]
         let handoffButton = app.buttons["today.workbench.handoff"]
         XCTAssertTrue(planButton.waitForExistence(timeout: 8) || handoffButton.exists, "值班操作栏缺少计划或交班入口")
-        if planButton.exists && planButton.isHittable {
-            planButton.tap()
-            XCTAssertTrue(app.buttons["passplan.capture.camera"].waitForExistence(timeout: 10), "值班计划缺少原相机拍照入口")
-            XCTAssertFalse(app.staticTexts["目标微信群"].exists, "值班计划不应要求填写目标群信息")
-            let shotPlan = XCTAttachment(screenshot: app.screenshot())
-            shotPlan.name = "duty-passplan-review"
-            shotPlan.lifetime = .keepAlways
-            add(shotPlan)
-            app.navigationBars.buttons.element(boundBy: 0).tap()
-        }
+        let planEntry = planButton.isHittable ? planButton : app.buttons["today.toolbar.plan"]
+        XCTAssertTrue(planEntry.isHittable)
+        planEntry.tap()
+        XCTAssertTrue(app.buttons["passplan.capture.camera"].waitForExistence(timeout: 10), "值班计划缺少原相机拍照入口")
+        XCTAssertFalse(app.staticTexts["目标微信群"].exists, "值班计划不应要求填写目标群信息")
+        let shotPlan = XCTAttachment(screenshot: app.screenshot())
+        shotPlan.name = "duty-passplan-review"
+        shotPlan.lifetime = .keepAlways
+        add(shotPlan)
+        app.navigationBars.buttons.element(boundBy: 0).tap()
 
         let backToHome = app.buttons["workspace.backToHome"]
         XCTAssertTrue(backToHome.waitForExistence(timeout: 10), "值班页左上角缺少返回首页按钮")
