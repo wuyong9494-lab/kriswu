@@ -5,7 +5,7 @@
 ## 覆盖统计
 
 - **能按业务入口去重的两组**。值班「全部功能」源码列 37 个目录项，其中 31 个已在模拟器逐项从目录打开，有两项是同一周会页面的不同筛选。工作台十个工坊均在 iPhone 与 iPad 从入口打开并返回；编程和办公助手共用一个视图实现。统计分母按各组的入口定义。
-- **按源码视图去重**。基线列出 203 个具名页面、预览及宿主候选，另录 1 个本轮新增导航包装。其中 65 个候选至少有一次模拟器页面到达或操作证据，58 个两种设备均有证据（iPhone 58 个、iPad 65 个）；另 138 个尚无逐页模拟器证据。每项证据的设备及操作范围见末列。
+- **按源码视图去重**。基线列出 203 个具名页面、预览及宿主候选，另录 1 个本轮新增导航包装。其中 67 个候选至少有一次模拟器页面到达或操作证据，59 个两种设备均有证据（iPhone 60 个、iPad 66 个）；另 136 个尚无逐页模拟器证据。每项证据的设备及操作范围见末列。
 - **内联状态与组件**。表内另列 49 组内联面板和条件状态，以及 163 个嵌入组件。多个状态可共享同一视图，也可依数据分流。独立业务页总数无法由 Swift 类型数推导；尚未取得逐页真机操作证据。
 
 ## 证据与真机待验
@@ -31,6 +31,10 @@
 
 ![iPhone 和 iPad 改前、改后的聊天与工作台](ui-evidence-20261127/chat-workbench.webp)
 
+长文及视频截图使用同一离线内容。长回答已展开，可见输入栏和底部导航；视频为生成进度样例，深色舞台上显示相同任务和控制栏。运行完成 7 项通道与作品专项、5 项语音状态专项及 5 项 UI 用例，两种设备都通过，均使用测试数据。 [iPhone 复测原图与日志](https://github.com/wuyong9494-lab/kriswu/actions/runs/46001068022/artifacts/15200784328) · [iPad 复测原图与日志](https://github.com/wuyong9494-lab/kriswu/actions/runs/46001068022/artifacts/15203030026)
+
+![iPhone 和 iPad 改前、改后的长回答与视频生成任务](ui-evidence-20261127/transcript-video.webp)
+
 ### 同输入性能记录
 
 本地禁网基准把 1,500 段共 88,893 字节的输入发布 250 次。逐次累计变更文本量由 11,101,689 字节降至 184,437 字节。该数字衡量重新参与更新的文本量。
@@ -43,12 +47,16 @@
 | iPhone · 基线 b09b95f | 即时 | 235 | 12/209 | 100 | 15055 |
 | iPhone · 初轮 f57f607 | 批量 | 324 | 45/81 | 857 | 7090 |
 | iPhone · 初轮 f57f607 | 即时 | 182 | 6/402 | 41 | 28212 |
+| iPhone · 复测 90b2f51 | 批量 | 396 | 36/59 | 6959 | 6264 |
+| iPhone · 复测 90b2f51 | 即时 | 389 | 34/398 | 188 | 27976 |
 | iPad · 基线 b09b95f | 批量 | 421 | 15/215 | 106 | 15055 |
 | iPad · 基线 b09b95f | 即时 | 276 | 19/224 | 71 | 16058 |
 | iPad · 初轮 f57f607 | 批量 | 566 | 36/66 | 1386 | 6500 |
 | iPad · 初轮 f57f607 | 即时 | 420 | 27/456 | 252 | 32696 |
+| iPad · 复测 90b2f51 | 批量 | 504 | 37/65 | 1702 | 6795 |
+| iPad · 复测 90b2f51 | 即时 | 270 | 21/403 | 88 | 28035 |
 
-初轮 iPhone 的即时模式首段缩短，iPad 的即时模式首段变长；两台的批量模式均有长间隔。每组每设备各一次，结果受模拟器负载和测试手势影响。原始输出在两台设备的 `wumind-layout.log`。 [基线](https://github.com/wuyong9494-lab/kriswu/actions/runs/45988612781) · [初轮](https://github.com/wuyong9494-lab/kriswu/actions/runs/45998573364)
+初轮 iPhone 的即时模式首段缩短，iPad 的即时模式首段变长；两台的批量模式均有长间隔。每组每设备各一次，结果受模拟器负载和测试手势影响。原始输出在两台设备的 `wumind-layout.log`。 [基线](https://github.com/wuyong9494-lab/kriswu/actions/runs/45988612781) · [初轮](https://github.com/wuyong9494-lab/kriswu/actions/runs/45998573364) · [复测](https://github.com/wuyong9494-lab/kriswu/actions/runs/46001068022)
 
 工坊入口从 XCTest 触发点击计到目标导航标题出现，含测试框架等待。初轮十个入口用时如下。
 
@@ -185,7 +193,7 @@ iPad 的实时语音入口本次耗时 11.8 秒。该指标以导航为终点，
 | 跨设备加密同步 `WuMindSyncSheet` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindSyncSheet.swift#L6) | 值班 › 设置 › 跨设备加密同步；或 WuMind 设置中的同步入口 | 联机／离线同步的通用口令前置，反馈可见 | iPad 模拟器操作通过；iPhone 模拟器操作通过；真机未验 |
 | WuMind 对话 `WuMindWorkspaceView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindView.swift#L76) | 首页 › WuMind | 减轻聊天顶部装饰、关键控件 44 pt，接回编辑入口 | iPad 模拟器操作通过、有截图；iPhone 模拟器操作通过、有截图；真机未验 |
 | `WuMindStreamingTurnView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindView.swift#L2787) | WuMind › 对话 › 流式回答 | 已完成段落复用，增量更新正文尾部 | iPad 模拟器操作通过；iPhone 模拟器操作通过；真机未验 |
-| `WuMindTurnView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindView.swift#L2849) | WuMind › 对话 › 回答卡片 › 展开或收起 | 流式回复按段渲染，完成后恢复完整 Markdown | 源码推定，未逐页点验 |
+| `WuMindTurnView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindView.swift#L2849) | WuMind › 对话 › 回答卡片 › 展开或收起 | 流式回复按段渲染，完成后恢复完整 Markdown | iPad 模拟器操作通过、有截图；iPhone 模拟器操作通过、有截图；真机未验 |
 | `WuMindMarkdownView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindView.swift#L3541) | WuMind › 对话 › 展开已完成回复 | 未发现页面级改动；保留专用布局 | 源码推定，未逐页点验 |
 | WUMIND 模型与能力中心 `WuMindModelHubSheet` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindView.swift#L3825) | WuMind › 工作台 › 模型与密钥 | 选择内置／自有，真实状态代替未知余额数字 | 源码推定，未逐页点验 |
 | 连接 GitHub `WuMindGitHubSheet` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindView.swift#L4755) | WuMind › 工作台 › 插件 › 连接 GitHub | 突出连接状态与仓库操作，去除重复横幅 | 源码推定，未逐页点验 |
@@ -319,7 +327,7 @@ iPad 的实时语音入口本次耗时 11.8 秒。该指标以导航为终点，
 | 分岔远征 `StarExpeditionHomeView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/StarExpeditionView.swift#L34) | 游戏 › 星了个星 › 更多玩法 › 分岔远征 | 将分岔路线和当前进度前置 | 源码推定，未逐页点验 |
 | `StarJourneyRewardView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/StarJourneyRewardView.swift#L3) | 游戏 › 星了个星 › 星际旅程 › 完成三关 › 奖励 | 三关完成后保留奖励及外观选择 | 源码推定，未逐页点验 |
 | 星际旅程 `StarJourneyHomeView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/StarJourneyView.swift#L3) | 游戏 › 星了个星 › 星际旅程 | 能力选择和关间选线随字号调整 | iPad 模拟器操作通过；iPhone 模拟器操作通过；真机未验 |
-| 逐手复盘 `StarRailReplayView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/StarRailReplayView.swift#L3) | 游戏 › 星了个星 › 星轨棋盘 › 逐手复盘 | 逐手复盘信息可缩放并保留回合顺序 | 源码推定，未逐页点验 |
+| 逐手复盘 `StarRailReplayView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/StarRailReplayView.swift#L3) | 游戏 › 星了个星 › 星轨棋盘 › 逐手复盘 | 逐手复盘信息可缩放并保留回合顺序 | iPhone 模拟器操作通过、有截图；真机未验 |
 | 星轨移层 `StarRailHomeView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/StarRailView.swift#L9) | 游戏 › 星了个星 › 更多玩法 › 星轨移层 | 突出关卡和进度，优化大字布局 | 源码推定，未逐页点验 |
 | 叠层与航线 `StarRailBoardView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/StarRailView.swift#L97) | 游戏 › 星了个星 › 续玩当前关卡；或更多玩法 › 星轨移层 › 选择关卡 | 大字号支持列表选牌，保留预览与结算 | iPad 模拟器操作通过；iPhone 模拟器操作通过；真机未验 |
 | 星约试炼 `StarTrialHomeView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/StarTrialView.swift#L46) | 游戏 › 星了个星 › 更多玩法 › 星约试炼 | 契约规则、关卡和挑战进度可读 | 源码推定，未逐页点验 |
