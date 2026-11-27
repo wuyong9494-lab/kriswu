@@ -979,7 +979,7 @@ struct WuMindWorkspaceView: View {
     // MARK: - Top Header Bar
 
     private var topBar: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 0) {
             if let onReturnHome {
                 Button {
                     dismissKeyboard()
@@ -991,14 +991,11 @@ struct WuMindWorkspaceView: View {
                     HStack(spacing: 3) {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 12, weight: .bold))
-                        Text("首页")
-                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        Text("首页").font(DS.Font.callout)
                     }
                     .foregroundStyle(.primary)
-                    .padding(.horizontal, 10)
-                    .frame(height: 36)
-                    .background(elevatedSurface, in: Capsule())
-                    .overlay(Capsule().strokeBorder(subtleBorder, lineWidth: 1))
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("返回首页")
