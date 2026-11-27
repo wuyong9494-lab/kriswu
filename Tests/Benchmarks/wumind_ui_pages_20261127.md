@@ -41,8 +41,8 @@
 
 | 提交与范围 | iPhone | iPad |
 |---|---|---|
-| 聊天、通道、语音专项和长文折叠 | [UI 5/5，托管 12/12](https://github.com/wuyong9494-lab/kriswu/actions/runs/46001068022/artifacts/15200784328) | [UI 5/5，托管 12/12](https://github.com/wuyong9494-lab/kriswu/actions/runs/46001068022/artifacts/15203030026) |
-| 大字号游戏第一次修正 | [UI 3/4](https://github.com/wuyong9494-lab/kriswu/actions/runs/46002041963/artifacts/15201983927)。失败：`testLargestTextKeepsLobbySelectionAndPracticeReachable` | [UI 4/4](https://github.com/wuyong9494-lab/kriswu/actions/runs/46002041963/artifacts/15203605572) |
+| `90b2f51` 聊天、通道、语音专项和长文折叠 | [UI 5/5，托管 12/12](https://github.com/wuyong9494-lab/kriswu/actions/runs/46001068022/artifacts/15200784328) | [UI 5/5，托管 12/12](https://github.com/wuyong9494-lab/kriswu/actions/runs/46001068022/artifacts/15203030026) |
+| `ab1acd5` 大字号游戏第一次修正 | [UI 3/4](https://github.com/wuyong9494-lab/kriswu/actions/runs/46002041963/artifacts/15201983927)。失败：`testLargestTextKeepsLobbySelectionAndPracticeReachable` | [UI 4/4](https://github.com/wuyong9494-lab/kriswu/actions/runs/46002041963/artifacts/15203605572) |
 
 ### 同输入性能记录
 
@@ -198,7 +198,7 @@ iPad 的实时语音入口本次耗时 11.8 秒。该指标以导航为终点，
 | 3D 空间工程库 `WuMindSpatialProjectLibrarySheet` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindSpatial3DStudioView.swift#L1373) | WuMind › 工作台 › 3D 空间 › 工程库 | 工程库使用编辑器同一组表面与标题 | 源码推定，未逐页点验 |
 | Tripo 自由造型道具接口 `WuMindSpatialTripoSheet` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindSpatial3DStudioView.swift#L1436) | WuMind › 工作台 › 3D 空间 › Tripo 自由造型道具接口 | 接口配置使用语义表单 | 源码推定，未逐页点验 |
 | 3D 技术库 `WuMind3DTechRegistrySheet` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindSpatial3DStudioView.swift#L1513) | WuMind › 工作台 › 3D 空间 › 技术库 | 状态筛选使用自适应网格 | 源码推定，未逐页点验 |
-| `WuMindSpatial3DViewport` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindSpatial3DViewport.swift#L12) | 首页 › WuMind › WuMindChatArtifactPreview › WuMindSpatial3DViewport | 未发现页面级改动；保留专用布局 | 源码推定，未逐页点验 |
+| `WuMindSpatial3DViewport` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindSpatial3DViewport.swift#L12) | WuMind › 工作台 › 3D 空间 › 工程视口；或从三维作品卡片进入 | 从真正完成绘制的回调及有效视口判定首帧，缺少 Metal 或超时显示说明 | 源码推定，未逐页点验 |
 | 跨设备加密同步 `WuMindSyncSheet` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindSyncSheet.swift#L6) | 值班 › 设置 › 跨设备加密同步；或 WuMind 设置中的同步入口 | 联机／离线同步的通用口令前置，反馈可见 | iPad 模拟器操作通过；iPhone 模拟器操作通过；真机未验 |
 | WuMind 对话 `WuMindWorkspaceView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindView.swift#L76) | 首页 › WuMind | 减轻聊天顶部装饰、关键控件 44 pt，接回编辑入口 | iPad 模拟器操作通过、有截图；iPhone 模拟器操作通过、有截图；真机未验 |
 | `WuMindStreamingTurnView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindView.swift#L2787) | WuMind › 对话 › 流式回答 | 已完成段落复用，增量更新正文尾部 | iPad 模拟器操作通过；iPhone 模拟器操作通过；真机未验 |
@@ -245,7 +245,7 @@ iPad 的实时语音入口本次耗时 11.8 秒。该指标以导航为终点，
 | 下载过程 `MeetingSourceView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MeetingViews.swift#L846) | 值班 › 设置 › 全部功能 › 周会问题 › 下载过程 | 沿用本轮共享字体、表面或表单组件 | 源码推定，未逐页点验 |
 | 周会文档 `MeetingDocBrowser` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MeetingViews.swift#L1063) | 值班 › 设置 › 全部功能 › 周会问题 › 下载过程 › 打开周会文档 | 沿用本轮共享字体、表面或表单组件 | 源码推定，未逐页点验 |
 | 搜索成员 `MemberSearchView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MemberSearchView.swift#L4) | 值班 › 设置 › 全部功能 › 搜索成员 | 合并各成员行的重复操作说明，保留搜索结果与详情入口 | iPad 模拟器留有修正前截图，修正后待复测；iPhone 模拟器留有修正前截图，修正后待复测；真机未验 |
-| `MemberScheduleView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MemberSearchView.swift#L81) | 值班 › 设置 › 全部功能 › 搜索成员 › 选中成员 | 沿用本轮共享字体、表面或表单组件 | 源码推定，未逐页点验 |
+| `MemberScheduleView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MemberSearchView.swift#L81) | 值班 › 设置 › 全部功能 › 搜索成员 › 选中成员 | 保留逐日排班导航，增加用于正常入口核对的日期行标识 | 源码推定，未逐页点验 |
 | 本周全员 `WeekRosterView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MoreViews.swift#L62) | 值班 › 设置 › 全部功能 › 本周全员 | 沿用本轮共享字体、表面或表单组件 | iPad 模拟器已到达并留图；iPhone 模拟器已到达并留图；真机未验 |
 | 自动同步设置向导 `AutomationGuideView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MoreViews.swift#L175) | 值班 › 设置 › 全部功能 › 自动同步设置向导 | 增加最近运行次数与结果，去除重复横幅 | iPad 模拟器已到达并留图；iPhone 模拟器已到达并留图；真机未验 |
 | 节假日值班 `HolidayDutyView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MoreViews.swift#L249) | 值班 › 设置 › 全部功能 › 节假日值班 | 节假日无数据时显示可见的空状态及说明 | iPad 模拟器留有修正前截图，修正后待复测；iPhone 模拟器留有修正前截图，修正后待复测；真机未验 |
@@ -318,7 +318,7 @@ iPad 的实时语音入口本次耗时 11.8 秒。该指标以导航为终点，
 | `ArenaPlayView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaView.swift#L50) | 游戏 › 勇者乱斗 › 选择玩法 › 开始对局 | 未发现页面级改动；保留专用布局 | 源码推定，未逐页点验 |
 | `ArenaRoomView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaView.swift#L133) | 游戏 › 勇者乱斗 › 联机或组队 › 加入房间 | 未发现页面级改动；保留专用布局 | 源码推定，未逐页点验 |
 | `ArenaMatchView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaView.swift#L368) | 游戏 › 勇者乱斗 › 开始对局或运行性能诊断 › 比赛场景 | 沿用本轮共享字体、表面或表单组件 | 源码推定，未逐页点验 |
-| `DuelHomeView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DuelHomeView.swift#L6) | 游戏 › 裂隙对决 | 保留练习与选角入口，减少重复提示 | iPad 模拟器操作通过、有截图；真机未验 |
+| `DuelHomeView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DuelHomeView.swift#L6) | 游戏 › 裂隙对决 | 大字号将角色旋转预览放入“查看武者外观”，允许大厅纵向滚到练习操作 | iPad 模拟器操作通过、有截图；真机未验 |
 | `DuelLobbyPreview` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DuelLobbyPreview.swift#L75) | 游戏 › 裂隙对决 › 大厅 › 角色预览 | 未发现页面级改动；保留专用布局 | 源码推定，未逐页点验 |
 | 双人格斗 · 联机测试 `DuelNetworkEntryView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DuelNetworkRoomView.swift#L4) | 游戏 › 裂隙对决 › 联机 | 简化联机帮助，随辅助字号重排连接选择 | 源码推定，未逐页点验 |
 | `DuelNetworkRoomView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DuelNetworkRoomView.swift#L107) | 游戏 › 裂隙对决 › 联机 › 进入房间 | 未发现页面级改动；保留专用布局 | 源码推定，未逐页点验 |
