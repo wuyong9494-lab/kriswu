@@ -1,4 +1,5 @@
 import AVFoundation
+import Network
 import SwiftUI
 
 enum AILiveCallPhase: Equatable {
@@ -25,19 +26,9 @@ struct AILiveVoiceTelemetry: Equatable {
     var serverVADStopped = false
     var firstAudioReceived = false
     var speakerPlaying = false
-    var sentFramesCount = 0
-    var receivedChunksCount = 0
+    var firstPlaybackMS: Int?
     var outputRoute = "系统默认输出"
 
-    mutating func reset() {
-        micCaptured = false
-        audioSent = false
-        serverVADStopped = false
-        firstAudioReceived = false
-        speakerPlaying = false
-        sentFramesCount = 0
-        receivedChunksCount = 0
-    }
 }
 
 @MainActor
@@ -46,7 +37,7 @@ struct AILiveCallView: View {
     var onDismiss: (() -> Void)? = nil
 
     @Environment(\.scenePhase) private var phase
-    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.openURL) private var openURL
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var wmStore = WuMindStore.shared
     @StateObject private var call = AILiveCallController()
@@ -54,24 +45,15 @@ struct AILiveCallView: View {
     @State private var confirmation = false
     @State private var showingKey = false
     @State private var keyAvailable = false
-    @State private var orbPulse = false
     @State private var didAttemptAutoConnect = false
-    @State private var showPipelineTrace = true
+    @State private var showPipelineTrace = false
 
-    private var isDark: Bool { colorScheme == .dark }
-    private var stageBg: Color {
-        isDark ? Color(red: 0.025, green: 0.032, blue: 0.05) : Color(red: 0.945, green: 0.96, blue: 0.98)
-    }
-    private var accent: Color {
+    private var phaseColor: Color {
         switch call.callPhase {
-        case .speaking:
-            return Color(red: 0.45, green: 0.34, blue: 0.98)
-        case .listening:
-            return Color(red: 0.12, green: 0.78, blue: 0.60)
-        case .disconnected:
-            return Color.orange
-        case .idle, .connecting:
-            return Color(red: 0.22, green: 0.52, blue: 0.96)
+        case .speaking: return DS.Palette.accent
+        case .listening: return DS.Palette.success
+        case .disconnected: return DS.Palette.warning
+        case .idle, .connecting: return DS.Palette.info
         }
     }
 
@@ -94,313 +76,119 @@ struct AILiveCallView: View {
     }
 
     var body: some View {
-        ZStack {
-            stageBg.ignoresSafeArea()
-            RadialGradient(
-                colors: [
-                    accent.opacity(call.connected ? 0.30 : (isDark ? 0.18 : 0.10)),
-                    Color.clear
-                ],
-                center: .center,
-                startRadius: 24,
-                endRadius: 320
-            )
-            .ignoresSafeArea()
-            .allowsHitTesting(false)
-
-            VStack(spacing: 16) {
-                // Top Bar: Close (when fullScreenCover) + Model Picker + Config Key
-                HStack(spacing: 8) {
-                    if onDismiss != nil {
-                        Button {
+        ScrollView {
+            VStack(alignment: .leading, spacing: DS.Space.m) {
+                if let onDismiss {
+                    HStack {
+                        Text("实时语音").font(DS.Font.title)
+                        Spacer()
+                        Button("关闭") {
                             call.hangUp()
-                            onDismiss?()
-                            dismiss()
-                        } label: {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 14, weight: .bold))
-                                .foregroundStyle(.primary)
-                                .frame(width: 34, height: 34)
-                                .background(.ultraThinMaterial, in: Circle())
+                            onDismiss()
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("关闭实时语音")
                         .accessibilityIdentifier("ai.live.close")
                     }
-
-                    Spacer(minLength: 0)
-
-                    Menu {
-                        ForEach(AILiveProtocol.models) { option in
-                            Button {
-                                Haptics.select()
-                                model = option
-                            } label: {
-                                HStack {
-                                    Text(option.displayName)
-                                    if model == option {
-                                        Image(systemName: "checkmark")
-                                    }
-                                }
-                            }
-                        }
-                    } label: {
-                        HStack(spacing: 6) {
-                            Circle()
-                                .fill(isReadyToCall ? accent : Color.orange)
-                                .frame(width: 7, height: 7)
-                            Text(model?.displayName ?? "选择实时语音模型")
-                                .font(.footnote.weight(.semibold))
-                                .foregroundStyle(.primary)
-                                .lineLimit(1)
-                            Image(systemName: "chevron.down")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .background(.ultraThinMaterial, in: Capsule())
-                        .overlay(Capsule().strokeBorder(Color.primary.opacity(isDark ? 0.14 : 0.08), lineWidth: 0.8))
-                    }
-                    .tint(.primary)
-                    .disabled(call.active)
-
-                    if !useManagedGateway && !isReadyToCall && !call.active {
-                        Button {
-                            Haptics.tap()
-                            showingKey = true
-                        } label: {
-                            Label("配置 Key", systemImage: "key.fill")
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 8)
-                                .background(Color.orange, in: Capsule())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("ai.live.configureKey")
-                    }
-
-                    Spacer(minLength: 0)
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 12)
-
-                // Explicit unconfigured prompt (NEVER silently degrades to ordinary voice Q&A!)
-                if !isReadyToCall && !call.active {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Label("实时语音暂不可用", systemImage: "exclamationmark.triangle.fill")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(.orange)
-                        Text(useManagedGateway ? "内置通道尚未配置，请联系管理员。" : "请点「配置 Key」保存所选服务商的实时语音凭据。")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.orange.opacity(0.35), lineWidth: 1))
-                    .padding(.horizontal, 20)
-                    .accessibilityIdentifier("ai.live.unconfiguredBanner")
-                }
-
-                Spacer(minLength: 6)
-
-                // Breathing Voice Orb
-                ZStack {
-                    Circle()
-                        .fill(accent.opacity(call.connected ? 0.16 : 0.08))
-                        .frame(width: 210, height: 210)
-                        .scaleEffect(orbPulse ? 1.12 : 0.94)
-                        .animation(.easeInOut(duration: call.callPhase == .speaking ? 0.85 : (call.connected ? 1.3 : 2.6)).repeatForever(autoreverses: true), value: orbPulse)
-
-                    Circle()
-                        .fill(accent.opacity(call.connected ? 0.26 : 0.14))
-                        .frame(width: 162, height: 162)
-                        .scaleEffect(orbPulse ? 1.06 : 0.96)
-                        .animation(.easeInOut(duration: call.callPhase == .speaking ? 0.7 : 1.1).repeatForever(autoreverses: true), value: orbPulse)
-
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [accent, accent.opacity(0.65), Color.indigo.opacity(0.85)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 118, height: 118)
-                        .shadow(color: accent.opacity(0.45), radius: 24, y: 10)
-                        .overlay(
-                            Group {
-                                if call.callPhase == .connecting {
-                                    ProgressView().tint(.white).scaleEffect(1.3)
-                                } else {
-                                    Image(systemName: orbIconName)
-                                        .font(.system(size: 34, weight: .semibold))
-                                        .foregroundStyle(.white)
-                                }
-                            }
-                        )
-                }
-
-                // Truthful 4-State Status Header + Detail + Live Captions
-                VStack(spacing: 6) {
-                    Text(call.callPhase.title)
-                        .font(.title2.weight(.bold))
-                        .foregroundStyle(call.callPhase == .disconnected ? .orange : .primary)
-                        .accessibilityIdentifier("ai.live.phaseTitle")
-
-                    Text(call.status)
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 20)
-                        .accessibilityIdentifier("ai.live.status")
-
-                    Text(call.connected ? "\(activeRouteLabel) · 输出：\(call.telemetry.outputRoute)" : activeRouteLabel)
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 24)
-
-                    if !call.liveTranscript.isEmpty {
-                        ScrollView {
-                            Text(call.liveTranscript)
-                                .font(.footnote)
-                                .foregroundStyle(.primary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                AppSectionCard(tint: phaseColor) {
+                    HStack(spacing: DS.Space.m) {
+                        Image(systemName: orbIconName)
+                            .font(.title)
+                            .foregroundStyle(phaseColor)
+                            .frame(width: 56, height: 56)
+                            .background(phaseColor.opacity(0.12), in: Circle())
+                        VStack(alignment: .leading, spacing: DS.Space.xxs) {
+                            Text(call.callPhase.title)
+                                .font(DS.Font.title)
+                                .accessibilityIdentifier("ai.live.phaseTitle")
+                            Text(call.status).font(DS.Font.body).foregroundStyle(.secondary)
+                                .accessibilityIdentifier("ai.live.status")
                         }
-                        .frame(maxHeight: 88)
-                        .padding(12)
-                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        .padding(.horizontal, 20)
-                        .accessibilityIdentifier("ai.live.transcript")
+                    }
+                    Divider()
+                    LabeledContent("调用通道", value: activeRouteLabel)
+                    LabeledContent("音频输出", value: call.active || call.callPhase == .disconnected
+                                   ? call.telemetry.outputRoute : "系统当前设备")
+                    if call.connected {
+                        Button(call.muted ? "取消静音" : "麦克风静音") { call.toggleMute() }
+                            .accessibilityIdentifier("ai.live.mute")
                     }
                 }
-
-                // 5-Stage Live Pipeline Diagnostic Strip (never silent failure!)
-                if call.active || call.callPhase == .disconnected || showPipelineTrace {
-                    pipelineTraceStrip
-                        .padding(.horizontal, 18)
-                }
-
-                Spacer(minLength: 8)
-
-                // Floating Frosted-Glass Call Controls Dock
-                VStack(spacing: 12) {
-                    HStack(spacing: 20) {
-                        if call.active {
-                            if call.connected {
-                                Button {
-                                    Haptics.tap()
-                                    call.toggleMute()
-                                } label: {
-                                    VStack(spacing: 6) {
-                                        Image(systemName: call.muted ? "mic.slash.fill" : "mic.fill")
-                                            .font(.system(size: 20, weight: .semibold))
-                                            .foregroundStyle(call.muted ? .white : .primary)
-                                            .frame(width: 58, height: 58)
-                                            .background(call.muted ? Color.orange : Color.primary.opacity(isDark ? 0.14 : 0.08), in: Circle())
-                                        Text(call.muted ? "取消静音" : "静音")
-                                            .font(.caption2.weight(.semibold))
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityIdentifier("ai.live.mute")
+                .font(DS.Font.body)
+                if !isReadyToCall || call.needsMicrophoneSettings {
+                    AppSectionCard {
+                        if call.needsMicrophoneSettings {
+                            Button("打开系统设置，允许麦克风") {
+                                if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
                             }
-
-                            Button {
-                                Haptics.warning()
-                                call.hangUp(reason: "已挂断实时语音")
-                            } label: {
-                                VStack(spacing: 6) {
-                                    Image(systemName: "phone.down.fill")
-                                        .font(.system(size: 22, weight: .bold))
-                                        .foregroundStyle(.white)
-                                        .frame(width: 66, height: 66)
-                                        .background(DS.Palette.danger, in: Circle())
-                                        .shadow(color: DS.Palette.danger.opacity(0.45), radius: 14, y: 6)
-                                    Text("挂断")
-                                        .font(.caption2.weight(.semibold))
-                                        .foregroundStyle(DS.Palette.danger)
-                                }
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityIdentifier("ai.live.end")
-                        } else if call.callPhase == .disconnected {
-                            // Explicit Manual Retry (no infinite auto-redial, no white screen)
-                            Button {
-                                Haptics.tap()
-                                if isReadyToCall {
-                                    startSelectedCall()
-                                } else if !useManagedGateway {
-                                    showingKey = true
-                                }
-                            } label: {
-                                HStack(spacing: 10) {
-                                    Image(systemName: "arrow.clockwise")
-                                        .font(.system(size: 16, weight: .bold))
-                                    Text("重新连接实时语音")
-                                        .font(.headline.weight(.bold))
-                                }
-                                .foregroundStyle(.white)
-                                .frame(maxWidth: 280)
-                                .padding(.vertical, 15)
-                                .background(Color.orange, in: Capsule())
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(model == nil || (useManagedGateway && !isReadyToCall))
-                            .accessibilityIdentifier("ai.live.retry")
+                        } else if useManagedGateway {
+                            Text("内置通道尚未配置，请联系管理员。")
+                                .accessibilityIdentifier("ai.live.unconfiguredBanner")
                         } else {
-                            Button {
-                                Haptics.tap()
-                                if isReadyToCall {
-                                    confirmation = true
-                                } else if !useManagedGateway {
-                                    showingKey = true
-                                }
-                            } label: {
-                                HStack(spacing: 10) {
-                                    Image(systemName: "phone.fill")
-                                        .font(.system(size: 17, weight: .bold))
-                                    Text("开始实时语音")
-                                        .font(.headline.weight(.bold))
-                                }
-                                .foregroundStyle(.white)
-                                .frame(maxWidth: 280)
-                                .padding(.vertical, 16)
-                                .background(
-                                    LinearGradient(
-                                        colors: [accent, Color.indigo],
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    ),
-                                    in: Capsule()
-                                )
-                                .shadow(color: accent.opacity(0.38), radius: 16, y: 8)
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(model == nil || (useManagedGateway && !isReadyToCall))
-                            .accessibilityIdentifier("ai.live.start")
+                            Button("配置 OpenAI 语音凭据") { showingKey = true }
+                                .accessibilityIdentifier("ai.live.configureKey")
                         }
                     }
-
-                    Text("接通就绪后 AI 会主动问候「你好，今天想聊什么？」；随时开口可打断；挂断立即释放麦克风，单次上限 10 分钟。")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 22)
+                    .font(DS.Font.body)
                 }
-                .padding(.bottom, 20)
+                if !call.liveTranscript.isEmpty {
+                    AppSectionCard(title: "实时字幕") {
+                        Text(call.liveTranscript).font(DS.Font.body).textSelection(.enabled)
+                    }
+                    .accessibilityIdentifier("ai.live.transcript")
+                }
+                AppSectionCard {
+                    Picker("语音模型", selection: $model) {
+                        ForEach(useManagedGateway ? AILiveProtocol.managedModels : AILiveProtocol.models) { item in Text(item.displayName).tag(Optional(item)) }
+                    }
+                    .pickerStyle(.menu)
+                    .disabled(call.active)
+                    DisclosureGroup(isExpanded: $showPipelineTrace) {
+                        VStack(alignment: .leading, spacing: DS.Space.xs) {
+                            stageDot("已采集麦克风音频", ok: call.telemetry.micCaptured)
+                                .accessibilityIdentifier("ai.live.micEvidence")
+                            stageDot("已发送音频", ok: call.telemetry.audioSent)
+                            stageDot("服务端检测到停顿", ok: call.telemetry.serverVADStopped)
+                            stageDot("已收到回复音频", ok: call.telemetry.firstAudioReceived)
+                            stageDot("已启动播放", ok: call.telemetry.speakerPlaying)
+                            if let ms = call.telemetry.firstPlaybackMS {
+                                Text("连接到首次启动播放  \(ms) ms")
+                            }
+                        }
+                        .font(DS.Font.caption)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    } label: {
+                        Text("通话诊断").accessibilityIdentifier("ai.live.pipelineTrace")
+                    }
+                }
+                if !call.active {
+                    Text("扬声器和蓝牙耳机跟随系统音频输出。蓝牙设备未出现时，可先在系统蓝牙设置中重新连接。")
+                        .font(DS.Font.caption).foregroundStyle(.secondary)
+                }
             }
-            .frame(maxWidth: 640)
+            .padding(DS.Space.m)
+            .frame(maxWidth: DS.readableWidth)
             .frame(maxWidth: .infinity)
         }
+        .safeAreaInset(edge: .bottom) {
+            AppPrimaryCTA(
+                title: call.active ? "挂断" : (call.callPhase == .disconnected ? "重新连接" : "开始实时语音"),
+                icon: call.active ? "phone.down.fill" : "phone.fill",
+                tint: call.active ? DS.Palette.danger : DS.Palette.accent,
+                isDisabled: !call.active && (!isReadyToCall || model == nil)
+            ) {
+                if call.active { call.hangUp(reason: "已挂断实时语音") }
+                else { confirmation = true }
+            }
+            .accessibilityIdentifier(call.active ? "ai.live.end" : (call.callPhase == .disconnected ? "ai.live.retry" : "ai.live.start"))
+            .padding(DS.Space.m)
+            .frame(maxWidth: DS.readableWidth)
+            .frame(maxWidth: .infinity)
+            .background(.regularMaterial)
+        }
+        .appBackground()
         .navigationTitle("实时语音通话")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
-            orbPulse = true
             keyAvailable = !useManagedGateway && Keychain.providerChatAPIKey(.openAI) != nil
             call.setForeground(phase == .active)
             if autoConnectOnAppear && !didAttemptAutoConnect && isReadyToCall && phase == .active {
@@ -413,6 +201,13 @@ struct AILiveCallView: View {
             }
         }
         .onDisappear { call.hangUp() }
+        .onChange(of: wmStore.activeDataDestinationLabel) { _ in call.hangUp(reason: "调用通道已改变，请重新连接。") }
+        .onChange(of: wmStore.managedAccountID) { _ in
+            if call.connected && useManagedGateway { call.hangUp(reason: "登录账号已改变，请重新连接。") }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.mediaServicesWereResetNotification)) { _ in
+            if call.active { call.hangUp(reason: "系统音频服务已重置，请重新连接。", isFailure: true) }
+        }
         .onChange(of: phase) { newPhase in
             call.setForeground(newPhase == .active)
             if newPhase == .background || (newPhase != .active && call.connected) {
@@ -457,32 +252,10 @@ struct AILiveCallView: View {
         }
     }
 
-    private var pipelineTraceStrip: some View {
-        let t = call.telemetry
-        return HStack(spacing: 6) {
-            stageDot("麦克风", ok: t.micCaptured)
-            stageDot("已发出", ok: t.audioSent)
-            stageDot("判停", ok: t.serverVADStopped)
-            stageDot("首段音", ok: t.firstAudioReceived)
-            stageDot("播出", ok: t.speakerPlaying)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .accessibilityIdentifier("ai.live.pipelineTrace")
-    }
-
     private func stageDot(_ label: String, ok: Bool) -> some View {
-        HStack(spacing: 4) {
-            Circle()
-                .fill(ok ? Color.green : Color.secondary.opacity(0.35))
-                .frame(width: 7, height: 7)
-            Text(label)
-                .font(.system(size: 10, weight: ok ? .bold : .medium))
-                .foregroundStyle(ok ? .primary : .secondary)
-                .lineLimit(1)
-        }
-        .frame(maxWidth: .infinity)
+        Label(label, systemImage: ok ? "checkmark.circle.fill" : "circle")
+            .foregroundStyle(ok ? DS.Palette.success : Color.secondary)
+            .accessibilityValue(ok ? "已完成" : "未完成")
     }
 
     private func startSelectedCall() {
@@ -535,7 +308,55 @@ private final class LiveSocketPolicy: NSObject, URLSessionTaskDelegate, Sendable
 }
 
 @MainActor
-private final class AILiveCallController: ObservableObject {
+protocol AILiveConnection: AnyObject {
+    func read() async throws -> URLSessionWebSocketTask.Message
+    func write(_ data: Data) async throws
+    func close()
+}
+
+@MainActor
+private final class LiveNetworkConnection: AILiveConnection {
+    let session: URLSession
+    let socket: URLSessionWebSocketTask
+    private let monitor = NWPathMonitor()
+
+    init(request: URLRequest, protocols: [String]?) throws {
+        let config = URLSessionConfiguration.ephemeral
+        config.urlCache = nil
+        config.urlCredentialStorage = nil
+        config.httpCookieStorage = nil
+        config.httpShouldSetCookies = false
+        config.timeoutIntervalForRequest = 20
+        config.timeoutIntervalForResource = 660
+        let session = URLSession(configuration: config, delegate: LiveSocketPolicy(), delegateQueue: nil)
+        self.session = session
+        if let protocols, let url = request.url {
+            socket = session.webSocketTask(with: url, protocols: protocols)
+        } else {
+            socket = session.webSocketTask(with: request)
+        }
+        socket.maximumMessageSize = AILiveProtocol.maximumServerEventBytes
+        let callSocket = socket
+        monitor.pathUpdateHandler = { path in
+            if path.status == .unsatisfied {
+                callSocket.cancel(with: .goingAway, reason: nil)
+            }
+        }
+        monitor.start(queue: DispatchQueue(label: "wumind.voice.network"))
+        socket.resume()
+    }
+
+    func read() async throws -> URLSessionWebSocketTask.Message { try await socket.receive() }
+    func write(_ data: Data) async throws { try await socket.send(.string(String(decoding: data, as: UTF8.self))) }
+    func close() {
+        monitor.cancel()
+        socket.cancel(with: .normalClosure, reason: nil)
+        session.invalidateAndCancel()
+    }
+}
+
+@MainActor
+final class AILiveCallController: ObservableObject {
     @Published private(set) var callPhase: AILiveCallPhase = .idle
     @Published private(set) var status = "点击下方开始实时语音通话"
     @Published private(set) var liveTranscript = ""
@@ -552,8 +373,7 @@ private final class AILiveCallController: ObservableObject {
     }
 
     private var id: UUID?
-    private var socket: URLSessionWebSocketTask?
-    private var session: URLSession?
+    private var socket: AILiveConnection?
     private var startupOrReader: Task<Void, Never>?
     private var sender: Task<Void, Never>?
     private var connectDeadline: Task<Void, Never>?
@@ -561,13 +381,32 @@ private final class AILiveCallController: ObservableObject {
     private var audioRecoveryTask: Task<Void, Never>?
     private var capture: AsyncStream<LiveCaptureFrame>.Continuation?
     private var captureGate: LiveCaptureGate?
-    private let audio = AILiveAudio()
+    private let audio: AILiveAudioIO
+    private let permission: @MainActor () async -> Bool
+    private let connect: @MainActor (URLRequest, [String]?) throws -> AILiveConnection
+    private let replyTimeout: UInt64
+    private var replyDeadline: Task<Void, Never>?
+    private var captureDeadline: Task<Void, Never>?
+    private var startedAt: UInt64 = 0
+    @Published private(set) var needsMicrophoneSettings = false
+
+    init(audio: AILiveAudioIO? = nil,
+         permission: @escaping @MainActor () async -> Bool = { await AILiveAudio.requestMicrophonePermission() },
+         replyTimeout: UInt64 = 20_000_000_000,
+         connect: @escaping @MainActor (URLRequest, [String]?) throws -> AILiveConnection = {
+             try LiveNetworkConnection(request: $0, protocols: $1)
+         }) {
+        self.audio = audio ?? AILiveAudio()
+        self.permission = permission
+        self.replyTimeout = replyTimeout
+        self.connect = connect
+    }
     private var output: Output?
     private var cutItems = Set<String>()
     private var foreground = false
     private var userSpeaking = false
     private var omitNoiseReduction = false
-    private var hasGreetedInSession = false
+    private var sentSessionUpdate = false
 
     func setForeground(_ value: Bool) { foreground = value }
 
@@ -578,34 +417,40 @@ private final class AILiveCallController: ObservableObject {
         id = generation
         active = true
         connected = false
-        hasGreetedInSession = false
+        sentSessionUpdate = false
         liveTranscript = ""
-        telemetry.reset()
+        telemetry = AILiveVoiceTelemetry()
+        needsMicrophoneSettings = false
         omitNoiseReduction = true
         callPhase = .connecting
         status = "等待麦克风授权…"
 
         startupOrReader = Task { @MainActor [weak self] in
-            guard await AILiveAudio.requestMicrophonePermission() else {
-                self?.fail(generation, "未开启麦克风权限。请在系统设置中允许访问麦克风。")
+            guard let self else { return }
+            let granted = await self.permission()
+            guard self.id == generation, !Task.isCancelled else { return }
+            guard granted else {
+                self.needsMicrophoneSettings = true
+                self.fail(generation, "未开启麦克风权限。请在系统设置中允许访问麦克风。")
                 return
             }
-            guard let self, self.id == generation, !Task.isCancelled else { return }
             self.status = "正在连接 WUMIND 实时语音网关…"
             self.startConnectTimer(generation)
             do {
                 let userToken = try await store.ensureManagedAccount()
+                guard self.id == generation, !Task.isCancelled else { return }
+                guard store.managedSessionToken == userToken else { throw WuMindGatewayClient.GatewayError.unauthorized }
                 let gwURL = try WuMindGatewayClient.normalizedGatewayURL(store.gatewayBaseURL)
                 let req = try AILiveProtocol.directWebSocketRequest(
                     model: model,
                     baseURL: gwURL.absoluteString,
                     bearerToken: userToken
                 )
-                try await self.runDirectSocket(req, generation: generation)
+                try await self.runSocket(req, generation: generation)
             } catch is CancellationError {
-                self.hangUp(reason: "连接已取消")
+                self.fail(generation, "连接已取消")
             } catch let error as LocalizedError {
-                self.fail(generation, error.errorDescription ?? "WUMIND 实时语音连接失败。")
+                self.fail(generation, (error as? AILiveProtocolError) == .unauthorized ? "内置语音授权失败，请重新登录或联系管理员。" : (error.errorDescription ?? "WUMIND 实时语音连接失败。"))
             } catch {
                 self.fail(generation, "WUMIND 实时语音连接中断（\(error.localizedDescription)）。")
             }
@@ -619,9 +464,10 @@ private final class AILiveCallController: ObservableObject {
         id = generation
         active = true
         connected = false
-        hasGreetedInSession = false
+        sentSessionUpdate = false
         liveTranscript = ""
-        telemetry.reset()
+        telemetry = AILiveVoiceTelemetry()
+        needsMicrophoneSettings = false
         let cleanCustomBase = customBaseURL?.trimmingCharacters(in: .whitespacesAndNewlines)
         let useDirectRelay = cleanCustomBase?.isEmpty == false
         omitNoiseReduction = useDirectRelay
@@ -629,11 +475,14 @@ private final class AILiveCallController: ObservableObject {
         status = "等待麦克风授权…"
 
         startupOrReader = Task { @MainActor [weak self] in
-            guard await AILiveAudio.requestMicrophonePermission() else {
-                self?.fail(generation, "未开启麦克风权限。请在系统设置中允许访问麦克风。")
+            guard let self else { return }
+            let granted = await self.permission()
+            guard self.id == generation, !Task.isCancelled else { return }
+            guard granted else {
+                self.needsMicrophoneSettings = true
+                self.fail(generation, "未开启麦克风权限。请在系统设置中允许访问麦克风。")
                 return
             }
-            guard let self, self.id == generation, !Task.isCancelled else { return }
             self.status = useDirectRelay ? "正在连接中转实时语音（Bearer WS）…" : "正在连接 OpenAI Realtime…"
             self.startConnectTimer(generation)
             do {
@@ -643,7 +492,7 @@ private final class AILiveCallController: ObservableObject {
                         baseURL: baseStr,
                         bearerToken: apiKey
                     )
-                    try await self.runDirectSocket(directReq, generation: generation)
+                    try await self.runSocket(directReq, generation: generation)
                 } else {
                     let mint = try AILiveProtocol.tokenRequest(model: model, apiKey: apiKey)
                     let (bytes, _) = try await AIProviderToolHTTP.dataWithDiagnostics(
@@ -654,12 +503,11 @@ private final class AILiveCallController: ObservableObject {
                     guard self.id == generation, !Task.isCancelled else { return }
                     let token = try AILiveProtocol.parseToken(bytes)
                     let handshake = try AILiveProtocol.webSocketRequest(model: model, token: token)
-                    guard let socketURL = handshake.url else { throw MultiProviderAIError.invalidRequest }
-                    try await self.runOfficialSocket(socketURL, protocols: AILiveProtocol.webSocketProtocols(token: token),
+                    try await self.runSocket(handshake, protocols: AILiveProtocol.webSocketProtocols(token: token),
                                                      generation: generation)
                 }
             } catch is CancellationError {
-                self.hangUp(reason: "连接已取消")
+                self.fail(generation, "连接已取消")
             } catch let error as AILiveProtocolError {
                 self.fail(generation, error.errorDescription ?? "实时语音协议出错。")
             } catch let error as AIProviderToolDiagnosticError {
@@ -672,40 +520,12 @@ private final class AILiveCallController: ObservableObject {
         }
     }
 
-    private func makeSession() -> URLSession {
-        let config = URLSessionConfiguration.ephemeral
-        config.urlCache = nil
-        config.urlCredentialStorage = nil
-        config.httpCookieStorage = nil
-        config.httpShouldSetCookies = false
-        config.timeoutIntervalForRequest = 20
-        config.timeoutIntervalForResource = 660
-        return URLSession(configuration: config, delegate: LiveSocketPolicy(), delegateQueue: nil)
-    }
-
-    private func runDirectSocket(_ request: URLRequest, generation: UUID) async throws {
-        let session = makeSession()
-        self.session = session
-        let socket = session.webSocketTask(with: request)
-        socket.maximumMessageSize = AILiveProtocol.maximumServerEventBytes
+    private func runSocket(_ request: URLRequest, protocols: [String]? = nil, generation: UUID) async throws {
+        guard id == generation, !Task.isCancelled else { return }
+        let socket = try connect(request, protocols)
         self.socket = socket
-        socket.resume()
-        try await readLoop(socket: socket, generation: generation)
-    }
-
-    private func runOfficialSocket(_ url: URL, protocols: [String], generation: UUID) async throws {
-        let session = makeSession()
-        self.session = session
-        let socket = session.webSocketTask(with: url, protocols: protocols)
-        socket.maximumMessageSize = AILiveProtocol.maximumServerEventBytes
-        self.socket = socket
-        socket.resume()
-        try await readLoop(socket: socket, generation: generation)
-    }
-
-    private func readLoop(socket: URLSessionWebSocketTask, generation: UUID) async throws {
         while !Task.isCancelled, id == generation {
-            let packet = try await socket.receive()
+            let packet = try await socket.read()
             guard !Task.isCancelled, id == generation else { break }
             let bytes: Data
             switch packet {
@@ -717,14 +537,16 @@ private final class AILiveCallController: ObservableObject {
         }
     }
 
-    private func handle(_ event: AILiveProtocol.ServerEvent, socket: URLSessionWebSocketTask, generation: UUID) async throws {
+    private func handle(_ event: AILiveProtocol.ServerEvent, socket: AILiveConnection, generation: UUID) async throws {
         switch event {
         case .sessionCreated:
-            if !connected {
+            if !sentSessionUpdate {
+                sentSessionUpdate = true
                 status = "会话已创建，正在协商 24kHz PCM 音频与 VAD…"
                 try await send(AILiveProtocol.sessionUpdate(omitNoiseReduction: omitNoiseReduction), to: socket)
             }
         case .sessionReady:
+            guard sentSessionUpdate else { throw AILiveProtocolError.invalidSession }
             guard !connected else { return }
             guard foreground else {
                 fail(generation, "通话必须在前台开始，请回到页面重试。")
@@ -741,10 +563,10 @@ private final class AILiveCallController: ObservableObject {
 
             // Strictly AFTER server session.updated AND local AVAudioEngine playback readiness:
             // trigger ONE active greeting ("你好，今天想聊什么？") without repeating on route recovery.
-            if !hasGreetedInSession {
-                hasGreetedInSession = true
-                try? await send(AILiveProtocol.responseCreateGreeting("你好，今天想聊什么？"), to: socket)
-            }
+            awaitReply(generation)
+            do { try await send(AILiveProtocol.responseCreateGreeting(), to: socket) }
+            catch { fail(generation, "问候请求发送失败，请检查连接后重试。"); return }
+            guard id == generation else { return }
 
             callDeadline = Task { @MainActor [weak self] in
                 do { try await Task.sleep(nanoseconds: 600_000_000_000) } catch { return }
@@ -757,7 +579,6 @@ private final class AILiveCallController: ObservableObject {
             if !telemetry.firstAudioReceived {
                 telemetry.firstAudioReceived = true
             }
-            telemetry.receivedChunksCount += 1
             if output?.item != item || output?.contentIndex != index {
                 audio.resetPlayback()
                 output = Output(item: item, contentIndex: index, sentSamples: 0)
@@ -773,8 +594,12 @@ private final class AILiveCallController: ObservableObject {
                 return
             }
             output?.sentSamples += frame.count / 2
-            callPhase = .speaking
-            status = "AI 正在回复（随时开口可打断）"
+            replyDeadline?.cancel()
+            replyDeadline = nil
+            if callPhase != .speaking {
+                callPhase = .speaking
+                status = "AI 正在回复，可以开口打断。"
+            }
         case .transcriptDelta(let delta):
             if liveTranscript.count > 600 {
                 liveTranscript = String(liveTranscript.suffix(400))
@@ -786,6 +611,7 @@ private final class AILiveCallController: ObservableObject {
             }
         case .userSpeechStarted:
             userSpeaking = true
+            replyDeadline?.cancel()
             let current = output
             let played = audio.playedMilliseconds()
             audio.resetPlayback()
@@ -802,6 +628,7 @@ private final class AILiveCallController: ObservableObject {
             }
         case .userSpeechStopped:
             userSpeaking = false
+            awaitReply(generation)
             telemetry.serverVADStopped = true
             callPhase = .listening
             status = muted ? "麦克风已静音" : "服务端已判停 · 等待 AI 语音回复…"
@@ -810,7 +637,8 @@ private final class AILiveCallController: ObservableObject {
                 output?.finishedStreaming = true
             }
         case .responseDone:
-            if !userSpeaking {
+            output?.finishedStreaming = true
+            if !userSpeaking && !audio.hasPendingPlayback && replyDeadline == nil {
                 callPhase = .listening
                 status = muted ? "麦克风已静音" : "请继续说话"
             }
@@ -826,7 +654,7 @@ private final class AILiveCallController: ObservableObject {
         cutItems.insert(item)
     }
 
-    private func startAudio(_ socket: URLSessionWebSocketTask, generation: UUID) throws {
+    private func startAudio(_ socket: AILiveConnection, generation: UUID) throws {
         var continuation: AsyncStream<LiveCaptureFrame>.Continuation?
         let stream = AsyncStream<LiveCaptureFrame>(bufferingPolicy: .bufferingNewest(12)) { continuation = $0 }
         guard let sink = continuation else { return }
@@ -834,24 +662,35 @@ private final class AILiveCallController: ObservableObject {
         capture = sink
         captureGate = gate
         audio.onPlaybackStarted = { [weak self] in
-            guard let self else { return }
+            guard let self, self.id == generation else { return }
+            if self.telemetry.firstPlaybackMS == nil {
+                self.telemetry.firstPlaybackMS = Int((DispatchTime.now().uptimeNanoseconds - self.startedAt) / 1_000_000)
+            }
             self.telemetry.speakerPlaying = true
             self.telemetry.outputRoute = self.audio.activeOutputRouteDescription
         }
+        audio.onPlaybackDrained = { [weak self] in
+            guard let self, self.id == generation, self.callPhase == .speaking,
+                  self.output?.finishedStreaming == true else { return }
+            self.callPhase = .listening
+            self.status = self.muted ? "麦克风已静音" : "请继续说话"
+        }
         try audio.start { bytes in gate.enqueue(bytes, to: sink) }
+        awaitCapture(generation)
         sender = Task { @MainActor [weak self] in
             do {
                 for await frame in stream {
                     guard let self, !Task.isCancelled, self.id == generation else { return }
                     if !self.telemetry.micCaptured && !frame.bytes.isEmpty {
+                        self.captureDeadline?.cancel()
                         self.telemetry.micCaptured = true
                     }
                     if self.foreground, !self.muted, gate.isCurrent(frame.epoch) {
                         try await self.send(AILiveProtocol.appendPCM(frame.bytes), to: socket)
+                        guard self.id == generation, !Task.isCancelled else { return }
                         if !self.telemetry.audioSent {
                             self.telemetry.audioSent = true
                         }
-                        self.telemetry.sentFramesCount += 1
                     }
                 }
                 guard !Task.isCancelled else { return }
@@ -863,8 +702,8 @@ private final class AILiveCallController: ObservableObject {
         }
     }
 
-    private func send(_ bytes: Data, to socket: URLSessionWebSocketTask) async throws {
-        try await socket.send(.string(String(decoding: bytes, as: UTF8.self)))
+    private func send(_ bytes: Data, to socket: AILiveConnection) async throws {
+        try await socket.write(bytes)
     }
 
     func audioConfigurationChanged(_ engine: Any?) {
@@ -885,6 +724,8 @@ private final class AILiveCallController: ObservableObject {
             guard !Task.isCancelled, self.id == generation, self.connected else { return }
             if recovered {
                 self.telemetry.outputRoute = self.audio.activeOutputRouteDescription
+                self.telemetry.micCaptured = false
+                self.awaitCapture(generation)
                 self.callPhase = .listening
                 self.status = self.muted ? "麦克风已静音（音频路由已恢复）" : "音频设备已切换（\(self.telemetry.outputRoute)）· 请继续说话"
             } else {
@@ -896,11 +737,32 @@ private final class AILiveCallController: ObservableObject {
     func toggleMute() {
         guard connected else { return }
         muted = !muted
+        if muted { captureDeadline?.cancel() }
+        else if let generation = id { telemetry.micCaptured = false; awaitCapture(generation) }
         captureGate?.set(!muted)
         status = muted ? "麦克风已静音" : "请继续说话"
     }
 
+    private func awaitReply(_ generation: UUID) {
+        replyDeadline?.cancel()
+        let timeout = replyTimeout
+        replyDeadline = Task { @MainActor [weak self] in
+            do { try await Task.sleep(nanoseconds: timeout) } catch { return }
+            self?.fail(generation, "等待语音回复超时。请检查网络和当前输出设备，重新连接。")
+        }
+    }
+
+    private func awaitCapture(_ generation: UUID) {
+        captureDeadline?.cancel()
+        guard !muted else { return }
+        captureDeadline = Task { @MainActor [weak self] in
+            do { try await Task.sleep(nanoseconds: 8_000_000_000) } catch { return }
+            self?.fail(generation, "未收到麦克风输入。请检查麦克风或蓝牙设备后重新连接。")
+        }
+    }
+
     private func startConnectTimer(_ generation: UUID) {
+        startedAt = DispatchTime.now().uptimeNanoseconds
         connectDeadline = Task { @MainActor [weak self] in
             do { try await Task.sleep(nanoseconds: 20_000_000_000) } catch { return }
             self?.fail(generation, "连接超时。请检查网络、实时语音模型及上游通道配置后重试。")
@@ -924,11 +786,14 @@ private final class AILiveCallController: ObservableObject {
         capture?.finish()
         capture = nil
         audio.onPlaybackStarted = nil
+        audio.onPlaybackDrained = nil
         audio.stop()
-        socket?.cancel(with: .normalClosure, reason: nil)
+        socket?.close()
         socket = nil
-        session?.invalidateAndCancel()
-        session = nil
+        replyDeadline?.cancel()
+        replyDeadline = nil
+        captureDeadline?.cancel()
+        captureDeadline = nil
         startupOrReader?.cancel()
         startupOrReader = nil
         connectDeadline?.cancel()

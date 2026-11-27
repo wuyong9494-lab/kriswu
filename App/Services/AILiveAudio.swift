@@ -1,9 +1,25 @@
 import AVFoundation
 import Foundation
 
+@MainActor
+protocol AILiveAudioIO: AnyObject {
+    var activeOutputRouteDescription: String { get }
+    var isReconfiguring: Bool { get }
+    var hasPendingPlayback: Bool { get }
+    var onPlaybackStarted: (@MainActor () -> Void)? { get set }
+    var onPlaybackDrained: (@MainActor () -> Void)? { get set }
+    func start(onCapture: @escaping @Sendable (Data) -> Void) throws
+    func play(_ pcm16: Data) throws
+    func playedMilliseconds() -> Int
+    func resetPlayback()
+    func ownsEngine(_ candidate: Any?) -> Bool
+    func reconfigureForRouteChange() async -> Bool
+    func stop()
+}
+
 /// A foreground, caller-owned duplex engine. Wire format is 24 kHz mono PCM16 little-endian.
 @MainActor
-final class AILiveAudio {
+final class AILiveAudio: AILiveAudioIO {
     enum Issue: LocalizedError {
         case unavailable, invalidPlayback, playbackBacklog
 
@@ -72,6 +88,8 @@ final class AILiveAudio {
     }
 
     var onPlaybackStarted: (@MainActor () -> Void)?
+    var onPlaybackDrained: (@MainActor () -> Void)?
+    var hasPendingPlayback: Bool { pendingFrames > 0 }
 
     var activeOutputRouteDescription: String {
         let outputs = AVAudioSession.sharedInstance().currentRoute.outputs
@@ -150,6 +168,8 @@ final class AILiveAudio {
         _ = engine.outputNode
         try input.setVoiceProcessingEnabled(true)
         guard input.isVoiceProcessingEnabled else { throw Issue.unavailable }
+        let route = AVAudioSession.sharedInstance().currentRoute
+        guard !route.inputs.isEmpty, !route.outputs.isEmpty else { throw Issue.unavailable }
         let hardwareFormat = input.outputFormat(forBus: 0)
         guard hardwareFormat.sampleRate.isFinite, hardwareFormat.sampleRate > 0,
               hardwareFormat.channelCount > 0,
@@ -157,7 +177,7 @@ final class AILiveAudio {
                                            channels: 1, interleaved: false),
               let wirePlay = AVAudioFormat(standardFormatWithSampleRate: Self.wireRate, channels: 1)
         else { throw Issue.unavailable }
-        let capture = try CaptureConverter(from: hardwareFormat, to: wireInput, deliver: onCapture)
+        let capture = try LiveCaptureConverter(from: hardwareFormat, to: wireInput, deliver: onCapture)
         let player = AVAudioPlayerNode()
         engine.attach(player)
         engine.connect(player, to: engine.mainMixerNode, format: wirePlay)
@@ -168,8 +188,8 @@ final class AILiveAudio {
         let tap: @Sendable (AVAudioPCMBuffer, AVAudioTime) -> Void = { buffer, _ in
             capture.consume(buffer)
         }
-        input.removeTap(onBus: 0)
-        input.installTap(onBus: 0, bufferSize: 960, format: hardwareFormat, block: tap)
+        // A newly created engine has no tap. Let the device own its input format during route negotiation.
+        input.installTap(onBus: 0, bufferSize: 960, format: nil, block: tap)
         inputWithTap = input
         engine.prepare()
         try engine.start()
@@ -195,7 +215,8 @@ final class AILiveAudio {
     func play(_ pcm16: Data) throws {
         // Drop transient audio chunks while AVAudioEngine is rebuilding after a hardware route change.
         if isReconfiguring { return }
-        guard let player, let playFormat, engine?.isRunning == true else { throw Issue.unavailable }
+        guard let player, let playFormat, let engine, engine.isRunning, player.engine === engine,
+              !AVAudioSession.sharedInstance().currentRoute.outputs.isEmpty else { throw Issue.unavailable }
         guard !pcm16.isEmpty, pcm16.count.isMultiple(of: 2) else { throw Issue.invalidPlayback }
         let frames = Int64(pcm16.count / 2)
         guard frames <= Self.maxQueuedFrames - pendingFrames else { throw Issue.playbackBacklog }
@@ -225,6 +246,7 @@ final class AILiveAudio {
                 guard let self, self.epoch == epoch else { return }
                 self.pendingFrames = max(0, self.pendingFrames - frames)
                 self.confirmedFrames = max(self.confirmedFrames, endOfBuffer)
+                if self.pendingFrames == 0 { self.onPlaybackDrained?() }
             }
         }
         if !player.isPlaying {
@@ -277,7 +299,8 @@ final class AILiveAudio {
 
 /// Owned only by the serial AVAudioEngine tap for its lifetime. Its converter
 /// is never touched by playback or teardown code on the main actor.
-private final class CaptureConverter: @unchecked Sendable {
+final class LiveCaptureConverter: @unchecked Sendable {
+    private let sourceFormat: AVAudioFormat
     private let converter: AVAudioConverter
     private let format: AVAudioFormat
     private let ratio: Double
@@ -285,6 +308,7 @@ private final class CaptureConverter: @unchecked Sendable {
 
     init(from: AVAudioFormat, to: AVAudioFormat, deliver: @escaping @Sendable (Data) -> Void) throws {
         guard let converter = AVAudioConverter(from: from, to: to) else { throw AILiveAudio.Issue.unavailable }
+        self.sourceFormat = from
         self.converter = converter
         self.format = to
         self.ratio = to.sampleRate / from.sampleRate
@@ -300,7 +324,7 @@ private final class CaptureConverter: @unchecked Sendable {
     }
 
     func consume(_ input: AVAudioPCMBuffer) {
-        guard input.frameLength > 0, input.frameLength <= 8192 else { return }
+        guard input.format == sourceFormat, input.frameLength > 0, input.frameLength <= 8192 else { return }
         let capacity = ceil(Double(input.frameLength) * ratio) + 128
         guard capacity.isFinite, capacity > 0, capacity <= 24_000,
               let output = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(capacity))

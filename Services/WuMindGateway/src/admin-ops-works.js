@@ -1655,19 +1655,30 @@ export async function handleRealtimeWebSocketProxy(request, env, { json, authent
   const [clientWS, serverWS] = Object.values(pair);
   serverWS.accept();
 
+  let ended = false;
+  function closeSession(code = 1011, reason = "realtime_disconnected") {
+    if (ended) return;
+    ended = true;
+    // Peer close reasons can be non-transferable (e.g. 1006), oversized or provider-specific.
+    for (const socket of [serverWS, upstreamWS]) {
+      try { socket.close(code, reason); } catch {}
+    }
+  }
+
   serverWS.addEventListener("message", (evt) => {
-    try { upstreamWS.send(evt.data); } catch {}
+    if (ended) return;
+    try { upstreamWS.send(evt.data); } catch { closeSession(); }
   });
-  serverWS.addEventListener("close", () => {
-    try { upstreamWS.close(); } catch {}
-  });
+  serverWS.addEventListener("close", () => closeSession(1000, "client_closed"));
+  serverWS.addEventListener("error", () => closeSession());
+  upstreamWS.addEventListener("error", () => closeSession());
 
   upstreamWS.addEventListener("message", async (evt) => {
     try {
       const data = typeof evt.data === "string" && evt.data.includes(upstreamKey)
         ? evt.data.replaceAll(upstreamKey, "[redacted]") : evt.data;
-      serverWS.send(data);
-    } catch {}
+      if (!ended) serverWS.send(data);
+    } catch { closeSession(); }
     // Meter real token usage on response.done events!
     if (typeof evt.data === "string" && evt.data.includes("response.done")) {
       try {
@@ -1714,7 +1725,7 @@ export async function handleRealtimeWebSocketProxy(request, env, { json, authent
     }
   });
   upstreamWS.addEventListener("close", (evt) => {
-    try { serverWS.close(evt.code || 1000, redactUpstreamDiagnostic(evt.reason, upstreamKey)); } catch {}
+    closeSession(evt.code === 1000 ? 1000 : 1011, "upstream_closed");
   });
 
   return new Response(null, { status: 101, webSocket: clientWS });

@@ -20,9 +20,11 @@ public enum AILiveProtocol {
         Model(id: "gpt-realtime-2.1", displayName: "GPT Realtime 2.1"),
         Model(id: "gpt-realtime", displayName: "GPT Realtime (OpenAI / AIHubMix)"),
         Model(id: "gpt-realtime-mini", displayName: "GPT Realtime mini"),
-        Model(id: "gpt-4o-realtime-preview", displayName: "GPT-4o Realtime Preview"),
         Model(id: "gpt-realtime-2.1-mini", displayName: "GPT Realtime 2.1 mini"),
     ]
+
+    /// The managed proxy accepts a smaller model set than an official account.
+    public static let managedModels = models.filter { ["gpt-realtime", "gpt-realtime-2.1", "gpt-realtime-2.1-mini"].contains($0.id) }
 
     /// Signed 16-bit little-endian PCM, mono, at 24 kHz, without a WAV header.
     public static let sampleRate = 24_000

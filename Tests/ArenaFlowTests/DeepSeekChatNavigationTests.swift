@@ -221,6 +221,24 @@ final class DeepSeekChatNavigationTests: XCTestCase {
             let bar = app.navigationBars[title]
             XCTAssertTrue(bar.waitForExistence(timeout: 10), "一次点击应打开工具页面：" + title)
             print("WUMIND_OPEN tool=" + id + " elapsedMs=" + String(Int((ProcessInfo.processInfo.systemUptime - start) * 1000)))
+            if id == "wumind.quick.live" {
+                XCTAssertTrue(app.buttons["ai.live.start"].exists)
+                let diagnostics = app.buttons.containing(.staticText, identifier: "ai.live.pipelineTrace").firstMatch
+                let label = app.descendants(matching: .any).matching(identifier: "ai.live.pipelineTrace").firstMatch
+                let toggle = diagnostics.exists ? diagnostics : label
+                let micEvidence = app.descendants(matching: .any).matching(identifier: "ai.live.micEvidence").firstMatch
+                XCTAssertFalse(micEvidence.isHittable)
+                for _ in 0..<2 where !toggle.isHittable { app.swipeUp() }
+                XCTAssertTrue(toggle.isHittable)
+                toggle.tap()
+                XCTAssertTrue(micEvidence.waitForExistence(timeout: 3))
+                toggle.tap()
+                XCTAssertFalse(micEvidence.isHittable)
+                if app.staticTexts["ai.live.unconfiguredBanner"].exists {
+                    XCTAssertFalse(app.buttons["ai.live.start"].isEnabled)
+                    XCTAssertFalse(app.buttons["ai.live.configureKey"].exists)
+                }
+            }
             let shot = XCTAttachment(screenshot: app.screenshot())
             shot.name = "Workbench-" + id
             shot.lifetime = .keepAlways
