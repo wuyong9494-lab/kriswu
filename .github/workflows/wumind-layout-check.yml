@@ -104,6 +104,7 @@ jobs:
               ;;
             appearance)
               tests=(DutyDeepLinkReviewTests
+                     DutyPageReviewTests/testMemberRowsAndHolidaySummaryFromDirectory
                      DeepSeekChatNavigationTests/testDutyLargeTextCalendarFromLauncher
                      DeepSeekChatNavigationTests/testWuMindCleanLayoutAndToolSearch)
               ;;
