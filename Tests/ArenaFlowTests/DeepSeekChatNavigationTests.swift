@@ -41,6 +41,8 @@ final class DeepSeekChatNavigationTests: XCTestCase {
             app.swipeDown()
             stop.tap()
             XCTAssertTrue(probe.label.contains("bytes="))
+            XCTAssertTrue(probe.label.contains("followChecks="))
+            XCTAssertTrue(probe.label.contains("scrollRequests="))
             XCTAssertFalse(probe.label.contains("firstBodyMs=-1"))
             print("WUMIND_STREAM mode=" + mode + " " + probe.label)
             app.terminate()

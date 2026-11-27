@@ -16,6 +16,55 @@ final class WuMindTranscriptPresentationTests: XCTestCase {
         XCTAssertEqual(output, String(repeating: glyph, count: 250))
     }
 
+    func testStreamingBlocksRetainVerbatimTextAcrossReplacementsAndSplitLineEndings() {
+        var answer = WuMindStreamingAnswer()
+        let longLine = String(repeating: "👩🏻‍💻", count: 300)
+        answer.append(longLine + "\r")
+        XCTAssertTrue(answer.completeBlocks.isEmpty)
+        answer.append("\n第二段\n\n")
+        XCTAssertEqual(answer.completeBlocks, [longLine])
+        XCTAssertEqual(answer.tail, "第二段\n\n")
+        XCTAssertEqual(answer.text, longLine + "\r\n第二段\n\n")
+        let revision = answer.revision
+        answer.replace(with: "甲")
+        answer.replace(with: "乙")
+        XCTAssertGreaterThan(answer.revision, revision)
+        XCTAssertEqual(answer.text, "乙")
+        XCTAssertEqual(answer.tail, "乙")
+        XCTAssertTrue(answer.completeBlocks.isEmpty)
+    }
+
+    func testLongMultiParagraphStreamKeepsCompletedBlocksStableAtEveryFlush() {
+        var answer = WuMindStreamingAnswer()
+        var input = ""
+        var previousCount = 0
+        var fullBytes = 0
+        var changedBytes = 0
+        for index in 1...1_500 {
+            let delta = "第\(index)段：核对输入、处理过程和输出结果。\n\n"
+            input += delta
+            answer.append(delta)
+            guard index.isMultiple(of: 6) else { continue }
+            fullBytes += answer.text.utf8.count
+            changedBytes += answer.completeBlocks[previousCount...].reduce(0) { $0 + $1.utf8.count }
+            changedBytes += answer.tail.utf8.count
+            previousCount = answer.completeBlocks.count
+        }
+        XCTAssertEqual(answer.text, input)
+        XCTAssertEqual((answer.completeBlocks + [answer.tail]).joined(separator: "\n"), input)
+        XCTAssertLessThan(changedBytes, fullBytes / 10)
+        print("WUMIND_TEXT identicalInputBytes=\(input.utf8.count) flushes=250 fullBodyBytes=\(fullBytes) changedBlockBytes=\(changedBytes)")
+    }
+
+    func testScrollFollowsOverflowAndSkipsContentThatFitsOrHasSettled() {
+        let heights: [Double] = [75, 100, 100, 105, 100, 100.5, 120, 100]
+        let requests = heights.filter {
+            WuMindTranscriptPresentation.needsScrollToRevealBottom(contentBottom: $0, viewportHeight: 100)
+        }
+        XCTAssertEqual(requests, [105, 120])
+        XCTAssertFalse(WuMindTranscriptPresentation.needsScrollToRevealBottom(contentBottom: 500, viewportHeight: 0))
+    }
+
     func testUserCanDetachFromStreamingAndExplicitlyResume() {
         var follow = WuMindScrollFollowState()
         follow.handleUserDrag(translationY: 12, isGenerating: true)

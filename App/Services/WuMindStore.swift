@@ -619,7 +619,7 @@ final class WuMindStreamBuffer: ObservableObject {
     }
 
     var reasoning: String = ""
-    var answer: String = ""
+    var answer = WuMindStreamingAnswer()
     var reasoningSeconds: Double? = nil
     var agentSteps: [WuMindAgentStep] = []
     var activeAgentPhase: String? = nil
@@ -635,7 +635,7 @@ final class WuMindStreamBuffer: ObservableObject {
 
     func reset() {
         reasoning = ""
-        answer = ""
+        answer = WuMindStreamingAnswer()
         reasoningSeconds = nil
         agentSteps = []
         activeAgentPhase = nil
@@ -844,7 +844,11 @@ final class WuMindStore: ObservableObject {
     private var flushTimerTask: Task<Void, Never>?
     private var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
     private var pendingReasoning = ""
-    private var pendingAnswer = ""
+    private var pendingBody = WuMindStreamingAnswer()
+    private var pendingAnswer: String {
+        get { pendingBody.text }
+        set { pendingBody.replace(with: newValue) }
+    }
     private var pendingReasoningSeconds: Double? = nil
     private var pendingFirstTokenMs: Int? = nil
     private var pendingFirstRenderMs: Int? = nil
@@ -3180,11 +3184,11 @@ final class WuMindStore: ObservableObject {
     }
 
     private func appendStreamingAnswer(_ delta: String) {
-        pendingAnswer += delta
+        pendingBody.append(delta)
         streamDirty = true
         guard pendingFirstRenderMs == nil, let started = generationStartedAt,
               !delta.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        streamBuffer.answer = pendingAnswer
+        streamBuffer.answer = pendingBody
         streamBuffer.tick &+= 1
         streamBuffer.answerLayoutChanges.send()
         pendingFirstRenderMs = max(0, Int(Date().timeIntervalSince(started) * 1000))
@@ -3211,7 +3215,7 @@ final class WuMindStore: ObservableObject {
         activeGenerationConversationID = conversation
         activeTurnID = turn.id
         streamBenchmarkResult = ""
-        let probe = WuMindFrameProbe()
+        let probe = WuMindFrameProbe(batchedBaseline: batched)
         streamBenchmark = probe
         probe.start()
         startStreamFlusher(turnID: turn.id)
@@ -3221,7 +3225,7 @@ final class WuMindStore: ObservableObject {
                 guard activeTurnID == turn.id else { return }
                 let delta = "第" + String(index) + "段：核对输入、处理过程和输出结果。\n\n"
                 if batched {
-                    pendingAnswer += delta
+                    pendingBody.append(delta)
                     streamDirty = true
                 } else { appendStreamingAnswer(delta) }
             }
@@ -3304,7 +3308,7 @@ final class WuMindStore: ObservableObject {
                 case .warning(let warn):
                     if !warn.isEmpty {
                         stepAnswer += "\n\n> ⚠️ \(warn)"
-                        pendingAnswer += "\n\n> ⚠️ \(warn)"
+                        pendingBody.append("\n\n> ⚠️ \(warn)")
                         streamDirty = true
                     }
                 }
@@ -4147,9 +4151,9 @@ final class WuMindStore: ObservableObject {
                        let started = self.generationStartedAt {
                         self.pendingFirstRenderMs = max(1, Int(Date().timeIntervalSince(started) * 1000))
                     }
-                    let answerChanged = self.streamBuffer.answer.utf8.count != self.pendingAnswer.utf8.count
+                    let answerChanged = self.streamBuffer.answer.revision != self.pendingBody.revision
                     self.streamBuffer.reasoning = self.pendingReasoning
-                    self.streamBuffer.answer = self.pendingAnswer
+                    if answerChanged { self.streamBuffer.answer = self.pendingBody }
                     self.streamBuffer.reasoningSeconds = self.pendingReasoningSeconds
                     self.streamBuffer.agentSteps = self.pendingAgentSteps
                     self.streamBuffer.activeAgentPhase = self.pendingActiveAgentPhase
@@ -5627,6 +5631,20 @@ final class WuMindStore: ObservableObject {
 final class WuMindFrameProbe: NSObject {
     private var displayLink: CADisplayLink?
     private var previous: CFTimeInterval?
+    let batchedBaseline: Bool
+    private var followChecks = 0
+    private var scrollRequests = 0
+
+    init(batchedBaseline: Bool) {
+        self.batchedBaseline = batchedBaseline
+        super.init()
+    }
+
+    func recordFollowCheck(requestedScroll: Bool) {
+        followChecks += 1
+        if requestedScroll { scrollRequests += 1 }
+    }
+
     private var frameCount = 0
     private var slowFrames = 0
     private var longest = 0.0
@@ -5649,7 +5667,7 @@ final class WuMindFrameProbe: NSObject {
     func finish(firstBodyMs: Int?, bytes: Int) -> String {
         displayLink?.invalidate()
         displayLink = nil
-        return "firstBodyMs=\(firstBodyMs ?? -1) slowFrames=\(slowFrames)/\(frameCount) longestMs=\(Int(longest * 1000)) bytes=\(bytes)"
+        return "firstBodyMs=\(firstBodyMs ?? -1) slowFrames=\(slowFrames)/\(frameCount) longestMs=\(Int(longest * 1000)) bytes=\(bytes) followChecks=\(followChecks) scrollRequests=\(scrollRequests)"
     }
 }
 #endif

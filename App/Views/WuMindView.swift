@@ -1214,6 +1214,14 @@ struct WuMindWorkspaceView: View {
 
     // MARK: - Transcript / Welcome Canvas
 
+    private var usesBaselineStreamPresentation: Bool {
+        #if DEBUG
+        return store.streamBenchmark?.batchedBaseline == true
+        #else
+        return false
+        #endif
+    }
+
     private var transcriptView: some View {
         GeometryReader { viewportGeo in
             ScrollViewReader { scroller in
@@ -1255,6 +1263,7 @@ struct WuMindWorkspaceView: View {
                                     WuMindStreamingTurnView(
                                         turn: turn,
                                         streamBuffer: store.streamBuffer,
+                                        baseline: usesBaselineStreamPresentation,
                                         streamSmoothMode: store.preferences.streamSmoothMode,
                                         thinkingStartedAt: store.thinkingStartedAt,
                                         elevatedSurface: elevatedSurface,
@@ -1330,12 +1339,31 @@ struct WuMindWorkspaceView: View {
                             .frame(height: 8)
                             .id(bottomAnchor)
                     }
+                    .background {
+                        if generatingInCurrentConversation && scrollFollow.shouldAutoScrollOnStreamTick {
+                            WuMindScrollFollower(
+                                streamBuffer: store.streamBuffer,
+                                viewportHeight: viewportGeo.size.height,
+                                baseline: usesBaselineStreamPresentation
+                            ) { needsScroll in
+                                guard scrollFollow.shouldAutoScrollOnStreamTick else { return }
+                                #if DEBUG
+                                store.streamBenchmark?.recordFollowCheck(requestedScroll: needsScroll)
+                                #endif
+                                guard needsScroll else { return }
+                                var transaction = Transaction()
+                                transaction.disablesAnimations = true
+                                withTransaction(transaction) { scroller.scrollTo(bottomAnchor, anchor: .bottom) }
+                            }
+                        }
+                    }
                     .padding(.horizontal, 16)
                     .padding(.top, 12)
                     .padding(.bottom, 16)
                     .frame(maxWidth: 760)
                     .frame(maxWidth: .infinity)
                 }
+                .coordinateSpace(name: WuMindScrollFollower.viewport)
                 .scrollDismissesKeyboard(.immediately)
                 .contentShape(Rectangle())
                 .simultaneousGesture(TapGesture().onEnded {
@@ -1352,16 +1380,6 @@ struct WuMindWorkspaceView: View {
                         if next != scrollFollow { scrollFollow = next }
                     }
                 )
-                .background {
-                    if generatingInCurrentConversation && scrollFollow.shouldAutoScrollOnStreamTick {
-                        WuMindScrollFollower(streamBuffer: store.streamBuffer) {
-                            guard scrollFollow.shouldAutoScrollOnStreamTick else { return }
-                            var transaction = Transaction()
-                            transaction.disablesAnimations = true
-                            withTransaction(transaction) { scroller.scrollTo(bottomAnchor, anchor: .bottom) }
-                        }
-                    }
-                }
                 .onChange(of: turns.last?.id) { _ in
                     if scrollFollow.shouldAutoScrollOnStreamTick {
                         scroller.scrollTo(bottomAnchor, anchor: .bottom)
@@ -2702,17 +2720,44 @@ private struct WuMindIsolatedComposerBar: View {
     }
 }
 
-/// Scrolling follows material answer growth, not timer/reasoning ticks.
+/// Geometry stays local to this observer. Offsets update during scrolling without invalidating chat rows.
+private final class WuMindScrollGeometry: ObservableObject {
+    private(set) var frame = CGRect.null
+    let layoutChanges = PassthroughSubject<Void, Never>()
+
+    func update(_ next: CGRect) {
+        let sizeChanged = frame.size != next.size || frame.isNull
+        frame = next
+        if sizeChanged { layoutChanges.send() }
+    }
+}
+
 private struct WuMindScrollFollower: View {
+    static let viewport = "wumind.transcript.viewport"
     let streamBuffer: WuMindStreamBuffer
-    let onScrollToBottom: () -> Void
+    let viewportHeight: CGFloat
+    let baseline: Bool
+    let onCheck: (Bool) -> Void
+    @StateObject private var geometry = WuMindScrollGeometry()
 
     var body: some View {
         Color.clear
-            .frame(width: 0, height: 0)
-            .onReceive(streamBuffer.answerLayoutChanges.throttle(
+            .onGeometryChange(for: CGRect.self) { proxy in
+                proxy.frame(in: .named(Self.viewport))
+            } action: { frame in
+                geometry.update(frame)
+            }
+            .onChange(of: viewportHeight) { _ in geometry.layoutChanges.send() }
+            .onReceive((baseline ? streamBuffer.answerLayoutChanges : geometry.layoutChanges).throttle(
                 for: .milliseconds(210), scheduler: RunLoop.main, latest: true
-            )) { _ in onScrollToBottom() }
+            )) { _ in
+                guard !geometry.frame.isNull else { return }
+                onCheck(baseline || WuMindTranscriptPresentation.needsScrollToRevealBottom(
+                    contentBottom: Double(geometry.frame.maxY), viewportHeight: Double(viewportHeight)
+                ))
+            }
+            .accessibilityHidden(true)
+            .allowsHitTesting(false)
     }
 }
 
@@ -2720,6 +2765,7 @@ private struct WuMindScrollFollower: View {
 private struct WuMindStreamingTurnView: View {
     let turn: WuMindTurn
     @ObservedObject var streamBuffer: WuMindStreamBuffer
+    let baseline: Bool
     let streamSmoothMode: Bool
     let thinkingStartedAt: Date?
     let elevatedSurface: Color
@@ -2738,8 +2784,8 @@ private struct WuMindStreamingTurnView: View {
         if let sec = streamBuffer.reasoningSeconds {
             liveTurn.reasoningSeconds = sec
         }
-        if !streamBuffer.answer.isEmpty {
-            liveTurn.answer = streamBuffer.answer
+        if !streamBuffer.answer.text.isEmpty {
+            liveTurn.answer = streamBuffer.answer.text
         }
         if !streamBuffer.agentSteps.isEmpty {
             liveTurn.agentSteps = streamBuffer.agentSteps
@@ -2758,6 +2804,7 @@ private struct WuMindStreamingTurnView: View {
         }
         return WuMindTurnView(
             turn: liveTurn,
+            liveAnswer: baseline || streamBuffer.answer.text.isEmpty ? nil : streamBuffer.answer,
             isLast: true,
             isGenerating: true,
             liveElapsedSeconds: streamBuffer.liveElapsedSeconds,
@@ -2781,6 +2828,7 @@ private struct WuMindStreamingTurnView: View {
 
 private struct WuMindTurnView: View, Equatable {
     let turn: WuMindTurn
+    let liveAnswer: WuMindStreamingAnswer?
     let isLast: Bool
     let isGenerating: Bool
     let liveElapsedSeconds: Int
@@ -2804,6 +2852,7 @@ private struct WuMindTurnView: View, Equatable {
 
     init(
         turn: WuMindTurn,
+        liveAnswer: WuMindStreamingAnswer? = nil,
         isLast: Bool,
         isGenerating: Bool,
         liveElapsedSeconds: Int = 1,
@@ -2824,6 +2873,7 @@ private struct WuMindTurnView: View, Equatable {
         onRecoverTask: (() -> Void)? = nil
     ) {
         self.turn = turn
+        self.liveAnswer = liveAnswer
         self.isLast = isLast
         self.isGenerating = isGenerating
         self.liveElapsedSeconds = liveElapsedSeconds
@@ -2865,6 +2915,7 @@ private struct WuMindTurnView: View, Equatable {
     @ScaledMetric(relativeTo: .body) private var messageSize = 16.0
     @ScaledMetric(relativeTo: .footnote) private var disclosureSize = 14.0
     @State private var thinkingExpanded = false
+    @ScaledMetric(relativeTo: .body) private var streamingBodySize = 16.0
     @State private var answerExpansionOverride: Bool?
     @State private var showingPrimaryInCompactCompare = false
 
@@ -3353,7 +3404,7 @@ private struct WuMindTurnView: View, Equatable {
 
     private var answerBlock: some View {
         let longAnswer = WuMindTranscriptPresentation.shouldFoldAnswer(turn.answer)
-        let expanded = answerExpansionOverride ?? !longAnswer
+        let expanded = answerExpansionOverride ?? (isGenerating || !longAnswer)
         return VStack(alignment: .leading, spacing: 8) {
             Button {
                 answerExpansionOverride = !expanded
@@ -3364,14 +3415,26 @@ private struct WuMindTurnView: View, Equatable {
             .accessibilityIdentifier("wumind.answer.toggle")
             .accessibilityValue(expanded ? "已展开" : "已收起")
             if expanded {
-                WuMindMarkdownView(
-                    text: turn.answer,
-                    isStreaming: isGenerating && (streamSmoothMode || longAnswer),
-                    elevatedSurface: elevatedSurface,
-                    subtleBorder: subtleBorder,
-                    onCopyCode: onCopy
-                )
-                .accessibilityIdentifier("wumind.answer.full")
+                if let liveAnswer, !liveAnswer.completeBlocks.isEmpty {
+                    VStack(alignment: .leading, spacing: 5) {
+                        ForEach(liveAnswer.completeBlocks.indices, id: \.self) { index in
+                            Text(verbatim: liveAnswer.completeBlocks[index])
+                        }
+                        Text(verbatim: liveAnswer.tail.isEmpty ? "\u{200B}" : liveAnswer.tail)
+                    }
+                    .font(.system(size: streamingBodySize)).lineSpacing(5)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("wumind.answer.full")
+                } else {
+                    WuMindMarkdownView(
+                        text: turn.answer,
+                        isStreaming: isGenerating && (streamSmoothMode || longAnswer),
+                        elevatedSurface: elevatedSurface,
+                        subtleBorder: subtleBorder,
+                        onCopyCode: onCopy
+                    )
+                    .accessibilityIdentifier("wumind.answer.full")
+                }
             } else {
                 Text(WuMindTranscriptPresentation.answerPreview(turn.answer))
                     .font(.system(size: messageSize))
