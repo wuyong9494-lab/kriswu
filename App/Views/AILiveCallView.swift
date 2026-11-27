@@ -76,7 +76,7 @@ struct AILiveCallView: View {
     }
 
     private var useManagedGateway: Bool {
-        wmStore.channel == .managed && wmStore.hasGatewayURL
+        wmStore.channel == .managed
     }
 
     private var activeRouteLabel: String {
@@ -90,7 +90,7 @@ struct AILiveCallView: View {
     }
 
     private var isReadyToCall: Bool {
-        useManagedGateway || keyAvailable
+        useManagedGateway ? wmStore.hasGatewayURL : keyAvailable
     }
 
     var body: some View {
@@ -165,7 +165,7 @@ struct AILiveCallView: View {
                     .tint(.primary)
                     .disabled(call.active)
 
-                    if !isReadyToCall && !call.active {
+                    if !useManagedGateway && !isReadyToCall && !call.active {
                         Button {
                             Haptics.tap()
                             showingKey = true
@@ -189,10 +189,10 @@ struct AILiveCallView: View {
                 // Explicit unconfigured prompt (NEVER silently degrades to ordinary voice Q&A!)
                 if !isReadyToCall && !call.active {
                     VStack(alignment: .leading, spacing: 6) {
-                        Label("尚未配置实时语音凭据（不会悄悄退回普通语音问答）", systemImage: "exclamationmark.triangle.fill")
+                        Label("实时语音暂不可用", systemImage: "exclamationmark.triangle.fill")
                             .font(.caption.weight(.bold))
                             .foregroundStyle(.orange)
-                        Text("请点击上方「配置 Key」填写 OpenAI / AIHubMix API Key，或切换至已配置的 WUMIND 内置网关后再开启实时通话。")
+                        Text(useManagedGateway ? "内置通道尚未配置，请联系管理员。" : "请点「配置 Key」保存所选服务商的实时语音凭据。")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -334,7 +334,7 @@ struct AILiveCallView: View {
                                 Haptics.tap()
                                 if isReadyToCall {
                                     startSelectedCall()
-                                } else {
+                                } else if !useManagedGateway {
                                     showingKey = true
                                 }
                             } label: {
@@ -350,14 +350,14 @@ struct AILiveCallView: View {
                                 .background(Color.orange, in: Capsule())
                             }
                             .buttonStyle(.plain)
-                            .disabled(model == nil)
+                            .disabled(model == nil || (useManagedGateway && !isReadyToCall))
                             .accessibilityIdentifier("ai.live.retry")
                         } else {
                             Button {
                                 Haptics.tap()
                                 if isReadyToCall {
                                     confirmation = true
-                                } else {
+                                } else if !useManagedGateway {
                                     showingKey = true
                                 }
                             } label: {
@@ -381,7 +381,7 @@ struct AILiveCallView: View {
                                 .shadow(color: accent.opacity(0.38), radius: 16, y: 8)
                             }
                             .buttonStyle(.plain)
-                            .disabled(model == nil)
+                            .disabled(model == nil || (useManagedGateway && !isReadyToCall))
                             .accessibilityIdentifier("ai.live.start")
                         }
                     }
@@ -401,11 +401,15 @@ struct AILiveCallView: View {
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             orbPulse = true
-            keyAvailable = Keychain.providerChatAPIKey(.openAI) != nil
+            keyAvailable = !useManagedGateway && Keychain.providerChatAPIKey(.openAI) != nil
             call.setForeground(phase == .active)
             if autoConnectOnAppear && !didAttemptAutoConnect && isReadyToCall && phase == .active {
                 didAttemptAutoConnect = true
-                startSelectedCall()
+                if useManagedGateway || wmStore.selectedProvider == .openAI {
+                    startSelectedCall()
+                } else {
+                    confirmation = true
+                }
             }
         }
         .onDisappear { call.hangUp() }
@@ -482,7 +486,7 @@ struct AILiveCallView: View {
     }
 
     private func startSelectedCall() {
-        guard phase == .active, let model else { return }
+        guard phase == .active, isReadyToCall, let model else { return }
         if useManagedGateway {
             call.beginManaged(model: model, store: wmStore)
         } else if let key = Keychain.providerChatAPIKey(.openAI) {

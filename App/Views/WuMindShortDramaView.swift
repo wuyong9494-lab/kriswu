@@ -271,15 +271,17 @@ struct WuMindShortDramaView: View {
                     .font(.caption.weight(.bold))
                     .foregroundStyle(.secondary)
                 Spacer()
-                Button {
-                    showingAPIConfig = true
-                } label: {
-                    let configuredCount = WuMindDramaVideoEngine.allCases.filter { dramaStore.isEngineConfigured($0) }.count
-                    Label("官方接口 (\(configuredCount)/\(WuMindDramaVideoEngine.allCases.count))", systemImage: "key.fill")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(configuredCount > 0 ? .green : .orange)
+                if chatStore.channel == .ownAPI {
+                    Button {
+                        showingAPIConfig = true
+                    } label: {
+                        let configuredCount = WuMindDramaVideoEngine.allCases.filter { dramaStore.isEngineConfigured($0) }.count
+                        Label("官方接口 (\(configuredCount)/\(WuMindDramaVideoEngine.allCases.count))", systemImage: "key.fill")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(configuredCount > 0 ? .green : .orange)
+                    }
+                    .accessibilityIdentifier("ai.drama.apiConfig")
                 }
-                .accessibilityIdentifier("ai.drama.apiConfig")
             }
 
             ScrollView(.horizontal, showsIndicators: false) {
@@ -882,6 +884,7 @@ struct WuMindShotReshootSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var dramaStore = WuMindShortDramaStore.shared
+    @ObservedObject private var chatStore = WuMindStore.shared
 
     @State private var reshootInstruction = ""
     @State private var keepDialogueAndVoice = true
@@ -1122,7 +1125,11 @@ struct WuMindShotReshootSheet: View {
                                 .padding(.vertical, 4)
                             }
 
-                            if !isConfigured {
+                            if !isConfigured && chatStore.channel == .managed {
+                                Text("内置通道暂无此引擎的可用模型，请联系管理员。")
+                                    .font(.caption)
+                                    .foregroundStyle(.orange)
+                            } else if !isConfigured {
                                 Button("去配置「\(selectedEngine.shortBadge)」官方 API Key") {
                                     dismiss()
                                     showingAPIConfig = true
@@ -1265,14 +1272,16 @@ struct WuMindShortDramaAPISheet: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
 
-                    TextField("模型或接入点 ID（如 doubao-seedance-1-0-pro-250528 / ep-...）", text: $dramaStore.arkModelID)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
+                    DisclosureGroup("高级设置") {
+                        TextField("模型或接入点 ID（如 doubao-seedance-1-0-pro-250528 / ep-...）", text: $dramaStore.arkModelID)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
 
-                    TextField("自定义 HTTPS 地址（留空默认 ark.cn-beijing.volces.com）", text: $dramaStore.arkBaseURL)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .keyboardType(.URL)
+                        TextField("自定义 HTTPS 地址（留空默认 ark.cn-beijing.volces.com）", text: $dramaStore.arkBaseURL)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .keyboardType(.URL)
+                    }
 
                     HStack {
                         Button("保存方舟凭据") {
@@ -1310,10 +1319,12 @@ struct WuMindShortDramaAPISheet: View {
                         Text("高品质 pro").tag("pro")
                     }
 
-                    TextField("自定义 HTTPS 地址（留空默认 api.klingai.com）", text: $dramaStore.klingBaseURL)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .keyboardType(.URL)
+                    DisclosureGroup("高级设置") {
+                        TextField("自定义 HTTPS 地址（留空默认 api.klingai.com）", text: $dramaStore.klingBaseURL)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .keyboardType(.URL)
+                    }
 
                     HStack {
                         Button("保存可灵 AK/SK") {

@@ -83,7 +83,6 @@ struct AIVideoToolView: View {
     @State private var stagePrompt = ""
     @State private var stagePreviousClipID: UUID?
     @State private var stageOwner: String?
-    @State private var showingAdminCatalog = false
     @State private var model: AIVideoTool.Model
     @State private var isSyncingModels = false
     @State private var syncStatusNote: String? = nil
@@ -167,7 +166,7 @@ struct AIVideoToolView: View {
     }
 
     private var useManagedGateway: Bool {
-        wmStore.channel == .managed && wmStore.hasGatewayURL
+        wmStore.channel == .managed
     }
 
     private var openAIUsesRelay: Bool {
@@ -192,12 +191,12 @@ struct AIVideoToolView: View {
     }
 
     private var activeModelID: String {
-        if useManagedGateway, let m = activeManagedVideoModel { return m.id }
+        if useManagedGateway { return activeManagedVideoModel?.id ?? "" }
         return model.id
     }
 
     private var activeModelDisplayName: String {
-        if useManagedGateway, let m = activeManagedVideoModel { return m.displayName }
+        if useManagedGateway { return activeManagedVideoModel?.displayName ?? "内置视频模型暂不可用" }
         return model.displayName
     }
 
@@ -217,7 +216,7 @@ struct AIVideoToolView: View {
     }
 
     private var hasKey: Bool {
-        useManagedGateway ? activeManagedVideoModel != nil : (Keychain.providerChatAPIKey(model.provider) != nil)
+        useManagedGateway ? (wmStore.hasGatewayURL && activeManagedVideoModel != nil) : (Keychain.providerChatAPIKey(model.provider) != nil)
     }
     private var hasAnyDramaKey: Bool {
         WuMindDramaVideoEngine.allCases.contains { WuMindShortDramaStore.shared.isEngineConfigured($0) }
@@ -293,19 +292,21 @@ struct AIVideoToolView: View {
                     }
                     .accessibilityIdentifier("ai.video.history")
 
-                    Button {
-                        if studioMode == .shortDrama {
-                            showingDramaAPIConfig = true
-                        } else {
-                            configuringProvider = model.provider
+                    if !useManagedGateway {
+                        Button {
+                            if studioMode == .shortDrama {
+                                showingDramaAPIConfig = true
+                            } else {
+                                configuringProvider = model.provider
+                            }
+                        } label: {
+                            let configured = (studioMode == .shortDrama) ? hasAnyDramaKey : hasKey
+                            Image(systemName: configured ? "key.fill" : "key.slash.fill")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(configured ? .green : .orange)
                         }
-                    } label: {
-                        let configured = (studioMode == .shortDrama) ? hasAnyDramaKey : hasKey
-                        Image(systemName: configured ? "key.fill" : "key.slash.fill")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(configured ? .green : .orange)
+                        .accessibilityIdentifier("ai.video.keyConfig")
                     }
-                    .accessibilityIdentifier("ai.video.keyConfig")
                 }
             }
         }
@@ -338,21 +339,12 @@ struct AIVideoToolView: View {
         .sheet(isPresented: $showingDramaAPIConfig) {
             WuMindShortDramaAPISheet()
         }
-        .sheet(isPresented: $showingAdminCatalog) {
-            NavigationStack {
-                WuMindAdminBillingView()
-                    .toolbar {
-                        ToolbarItem(placement: .navigationBarTrailing) {
-                            Button("完成") {
-                                showingAdminCatalog = false
-                                Task { try? await wmStore.refreshManagedAccount() }
-                            }
-                        }
-                    }
-            }
-        }
         .sheet(item: $configuringProvider) { provider in
             ProviderKeyView(provider: provider) { _ in }
+        }
+        .task(id: useManagedGateway) {
+            if useManagedGateway && wmStore.hasGatewayURL { try? await wmStore.syncManagedGatewayConfig() }
+            clampParametersForActiveModel()
         }
         .onAppear {
             clampParametersForActiveModel()
@@ -459,7 +451,7 @@ struct AIVideoToolView: View {
         VStack(spacing: 8) {
             HStack(spacing: 8) {
                 Menu {
-                    if useManagedGateway && !wmStore.enabledManagedVideoModels.isEmpty {
+                    if useManagedGateway {
                         ForEach(wmStore.enabledManagedVideoModels) { m in
                             Button {
                                 managedSelectedVideoID = m.id
@@ -600,11 +592,11 @@ struct AIVideoToolView: View {
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(.orange)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(useManagedGateway ? "管理员尚未在动态模型目录启用视频模型" : "尚未配置 \(model.provider.displayName) API Key")
+                    Text(useManagedGateway ? "内置视频通道暂不可用" : "尚未配置 \(model.provider.displayName) API Key")
                         .font(.caption.weight(.bold))
                     Text(useManagedGateway
-                         ? "请在「动态模型目录」同步并实测视频模型（推荐 wan2.6-t2v / veo-3.1-fast-generate-preview / kling-v3-omni）后启用，或一键切回「自带 API」通道。"
-                         : "填入官方 Key 或 AIHubMix 等中转站地址即可开始生成")
+                         ? "请联系管理员检查内置网关及可用视频模型。"
+                         : "请保存此服务商的 API Key。")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -623,19 +615,6 @@ struct AIVideoToolView: View {
 
             if useManagedGateway {
                 HStack(spacing: 8) {
-                    Button {
-                        Haptics.tap()
-                        showingAdminCatalog = true
-                    } label: {
-                        Label("去启用视频目录", systemImage: "checklist")
-                            .font(.caption2.weight(.bold))
-                            .padding(.horizontal, 11)
-                            .padding(.vertical, 7)
-                            .background(Color.purple.opacity(0.16), in: Capsule())
-                            .foregroundStyle(.purple)
-                    }
-                    .buttonStyle(.plain)
-
                     Button {
                         Haptics.tap()
                         wmStore.setChannel(.ownAPI)
@@ -941,8 +920,8 @@ struct AIVideoToolView: View {
         let idemKey = "vid-\(UUID().uuidString.prefix(12))"
 
         if useManagedGateway {
-            guard let managedModel = activeManagedVideoModel else {
-                errorMessage = "当前内置目录尚未开通可用视频模型，请在管理员后台「动态模型目录」实测并启用后再试。"
+            guard wmStore.hasGatewayURL, let managedModel = activeManagedVideoModel else {
+                errorMessage = "内置视频通道暂不可用，请联系管理员检查网关及视频模型。"
                 return
             }
             let preferredSize: String = {

@@ -59,8 +59,9 @@ enum WuMindChatBuildService {
         }
         if store.channel == .managed {
             let gateway = store.gatewayBaseURL
-            guard store.hasGatewayURL, Keychain.wumindGatewayUserToken != nil else {
-                throw BuildError.unavailable("请先连接并登录 WuMind 网关。")
+            guard store.hasGatewayURL else { throw BuildError.unavailable("内置网关尚未配置，请联系管理员。") }
+            guard store.managedSessionToken != nil else {
+                throw BuildError.unavailable("请先登录 WuMind 账号。")
             }
             if tool == .image {
                 let models = hasReference ? store.enabledManagedImageEditModels : store.enabledManagedImageModels.filter(\.supportsTextToImage)
@@ -78,19 +79,21 @@ enum WuMindChatBuildService {
             return .managedVideo(model, gateway, seconds, size)
         }
         let provider = store.activeProviderForDisplay.multiProvider
-        let configured: (AIProvider) -> Bool = { Keychain.providerChatAPIKey($0)?.isEmpty == false }
+
         if tool == .image {
-            let models = AIImageTool.models.filter { configured($0.provider) && (!hasReference || $0.supportsReferenceImage) }
-            guard let model = models.first(where: { $0.provider == provider }) ?? models.first else {
-                throw BuildError.unavailable("当前没有配置支持这项生图能力的 API。")
+            let models = AIImageTool.models.filter { !hasReference || $0.supportsReferenceImage }
+            guard let model = models.first(where: { $0.provider == provider }) else {
+                throw BuildError.unavailable("所选服务商不支持这项生图能力，请在自有通道中选择支持的服务商。")
             }
+            guard Keychain.providerChatAPIKey(model.provider) != nil else { throw BuildError.unavailable("请先保存所选服务商的 API Key。") }
             return .directImage(model, AIProviderEndpoints.baseURL(for: model.provider))
         }
         let relay = AIProviderToolHTTP.isOpenAICompatibleRelay(AIProviderEndpoints.baseURL(for: .openAI))
-        let models = AIVideoTool.availableBuiltInModels(openAIUsesRelay: relay).filter { configured($0.provider) }
-        guard let model = models.first(where: { $0.provider == provider }) ?? models.first else {
-            throw BuildError.unavailable("当前没有配置支持视频生成的 API。")
+        let models = AIVideoTool.availableBuiltInModels(openAIUsesRelay: relay)
+        guard let model = models.first(where: { $0.provider == provider }) else {
+            throw BuildError.unavailable("所选服务商不支持视频生成，请在自有通道中选择支持的服务商。")
         }
+        guard Keychain.providerChatAPIKey(model.provider) != nil else { throw BuildError.unavailable("请先保存所选服务商的 API Key。") }
         let seconds = WuMindChatBuild.supportedVideoSeconds(
             requested: WuMindChatBuild.requestedVideoSeconds(in: prompt), allowed: model.supportedDurations, fallback: model.defaultDuration
         )
@@ -133,7 +136,8 @@ enum WuMindChatBuildService {
             }
             return Artifact(title: title, bytes: data, mime: "video/mp4", fileExtension: "mp4", detail: "视频已生成，可以在对话中打开或分享。")
         case .managedImage(let model, let gateway):
-            guard let token = Keychain.wumindGatewayUserToken else { throw BuildError.unavailable("请重新登录网关。") }
+            guard gateway == WuMindStore.shared.gatewayBaseURL else { throw BuildError.unavailable("请切回选定的生图网关。") }
+            guard let token = WuMindStore.shared.managedSessionToken else { throw BuildError.unavailable("请重新登录网关。") }
             let response = try await WuMindGatewayClient().generateManagedImages(
                 gatewayURL: gateway, userToken: token, modelID: model.id, prompt: prompt, quality: "low",
                 referenceImage: reference, idempotencyKey: idempotency
@@ -141,7 +145,7 @@ enum WuMindChatBuildService {
             guard let first = response.data.first, let data = Data(base64Encoded: first.b64_json) else { throw BuildError.invalidArtifact }
             return try imageArtifact(data, remote: response.workID)
         case .managedVideo(let model, let gateway, let seconds, let size):
-            guard let token = Keychain.wumindGatewayUserToken else { throw BuildError.unavailable("请重新登录网关。") }
+            guard let token = WuMindStore.shared.managedSessionToken else { throw BuildError.unavailable("请重新登录网关。") }
             let client = WuMindGatewayClient()
             guard WuMindStore.shared.gatewayBaseURL == gateway else { throw BuildError.unavailable("请切回选定的视频网关。") }
             let accountID = WuMindStore.shared.managedAccountID

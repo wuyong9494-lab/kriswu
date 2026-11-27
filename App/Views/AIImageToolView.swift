@@ -33,7 +33,7 @@ struct AIImageToolView: View {
     @State private var showingDiagnostics = false
     @State private var isSyncingManagedCatalog = false
     @State private var credentialRevision = 0
-    @State private var ownConnectionPreference: AIImageOwnConnectionPreference = .auto
+    @State private var ownConnectionPreference = AIProviderEndpoints.imageStudioOwnConnectionPreference
 
     @State private var toastMessage: String? = nil
     @State private var lightboxItem: LightboxItem? = nil
@@ -610,13 +610,13 @@ struct AIImageToolView: View {
             case .managedCatalogSyncing:
                 return "正在同步网关已开通的生图能力…"
             case .managedGatewayConfigInvalid:
-                return "网关地址无效或未配置（不跳转填 Gemini Key）"
+                return "内置网关暂不可用，请联系管理员"
             case .managedModelNotEnabled(_, let name, _):
                 return "\(name) 内置暂未开通（不读本机 Key）"
             case .managedLoginRequired:
                 return "走 WuMind 凭证与余额，请先登录或检查网关"
             case .missingConnection(_, _, _, _):
-                return route == .ownAIHubMix ? "需配置 AIHubMix Base URL 与 Key" : "可选 AIHubMix 统一连接或厂商直连 Key"
+                return route == .ownAIHubMix ? "请保存 AIHubMix Key" : "可选 AIHubMix 统一连接或厂商直连 Key"
             case .referenceImageUnsupported(_, let name):
                 return "\(name) 仅支持纯文生图"
             }
@@ -924,7 +924,7 @@ struct AIImageToolView: View {
             HStack(spacing: 8) {
                 switch state {
                 case .managedGatewayConfigInvalid:
-                    Text("请前往设置修正 WuMind 网关 https:// 地址，或手动切至自有 API")
+                    Text("请联系管理员检查内置网关配置。")
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(.orange)
                         .fixedSize(horizontal: false, vertical: true)
@@ -2031,7 +2031,7 @@ struct AIImageToolView: View {
                 managedSelectedImageID = editModel.id
                 showToast("已切换至 \(editModel.displayName)")
             } else {
-                showToast("内置目录暂无已实测的参考图模型，请在管理员后台开启或改用自带 API")
+                showToast("内置目录暂无已开通的参考图模型，请联系管理员。")
             }
         } else if let refModel = AIImageTool.models.first(where: \.supportsReferenceImage) {
             model = refModel
@@ -2464,7 +2464,7 @@ struct AIImageToolView: View {
             directAPIKeyProvider: { Keychain.providerChatAPIKey($0) }
         ) else {
             let msg = ownConnectionPreference == .aihubmix
-                ? "尚未配置 AIHubMix 连接，请保存 AIHubMix Base URL 与 API Key 后重试。"
+                ? "尚未配置 AIHubMix 连接，请保存 AIHubMix API Key 后重试。"
                 : "尚未配置可用连接，请配置 AIHubMix 统一连接或 \(targetModel.provider.displayName) 直连 API Key。"
             failureMessage = msg
             lastClassifiedError = AIImageClassifiedError(category: .missingConnection, title: "缺连接", message: msg)

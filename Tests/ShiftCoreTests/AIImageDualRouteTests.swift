@@ -474,7 +474,7 @@ final class AIImageDualRouteTests: XCTestCase {
             XCTAssertEqual(eval.routeBadge, "WuMind 内置")
             XCTAssertEqual(eval.modelCenterPillTitle, "网关配置无效")
             if case .managedGatewayConfigInvalid(let detail) = eval {
-                XCTAssertTrue(detail.contains("网关"), "Must explicitly report gateway configuration issue")
+                XCTAssertTrue(detail.contains("管理员"), "Gateway configuration requires administrator action")
             } else {
                 XCTFail("Expected .managedGatewayConfigInvalid, got \(eval)")
             }

@@ -128,8 +128,8 @@ final class WuMindShortDramaStore: ObservableObject {
 
     func managedCatalogModel(for engine: WuMindDramaVideoEngine) -> WuMindCatalogModel? {
         let store = WuMindStore.shared
-        guard store.hasGatewayURL else { return nil }
-        let videoModels = store.managedCatalogModels.filter { $0.isCallable && $0.supportsVideo }
+        guard store.channel == .managed, store.hasGatewayURL else { return nil }
+        let videoModels = store.enabledManagedVideoModels
         return videoModels.first { model in
             let lower = model.id.lowercased()
             switch engine {
@@ -148,12 +148,12 @@ final class WuMindShortDramaStore: ObservableObject {
     }
 
     func isEngineConfigured(_ engine: WuMindDramaVideoEngine) -> Bool {
-        hasOwnKey(for: engine) || managedCatalogModel(for: engine) != nil
+        WuMindStore.shared.channel == .managed ? managedCatalogModel(for: engine) != nil : hasOwnKey(for: engine)
     }
 
     func channelLabel(for engine: WuMindDramaVideoEngine) -> String {
-        if hasOwnKey(for: engine) {
-            return "自有 API Key"
+        if WuMindStore.shared.channel == .ownAPI {
+            return hasOwnKey(for: engine) ? "自有 API Key" : "待配置个人凭据"
         }
         if let managed = managedCatalogModel(for: engine) {
             return "WUMIND 内置（\(managed.id)）"
@@ -164,7 +164,7 @@ final class WuMindShortDramaStore: ObservableObject {
     func generationPlan(for shot: WuMindDramaShot, engine: WuMindDramaVideoEngine) -> WuMindDramaShotGenerationPlan {
         let character = project.character(for: shot)
         let hasRef = character?.referenceImageBase64?.isEmpty == false
-        let managed = hasOwnKey(for: engine) ? nil : managedCatalogModel(for: engine)
+        let managed = managedCatalogModel(for: engine)
         let customDurations = managed?.supportedParams?.seconds
         let customPerSec = (managed?.pricingMode == "per_second" && (managed?.unitPriceYuan ?? 0) > 0)
             ? managed?.unitPriceYuan
@@ -292,7 +292,9 @@ final class WuMindShortDramaStore: ObservableObject {
     ) {
         guard let shot = project.shots.first(where: { $0.id == shotID }) else { return }
         guard isEngineConfigured(engine) else {
-            lastError = "尚未配置「\(engine.displayName)」接口凭据，且 WUMIND 内置视频目录暂无对应已验通模型。请先配置官方 API Key 或在计费管理开启对应模型。"
+            lastError = WuMindStore.shared.channel == .managed
+                ? "内置通道尚无可用的「\(engine.displayName)」模型，请联系管理员。"
+                : "请先保存「\(engine.displayName)」官方接口凭据。"
             return
         }
 
@@ -348,11 +350,9 @@ final class WuMindShortDramaStore: ObservableObject {
         let nextTakeNumber = (shot.takes.map(\.takeNumber).max() ?? 0) + 1
         let projectID = currentProject.id
         let shotTitle = shot.title
-        let useOwnKey = hasOwnKey(for: engine)
-        let managedModel = useOwnKey ? nil : managedCatalogModel(for: engine)
+        let useManaged = WuMindStore.shared.channel == .managed
+        let managedModel = managedCatalogModel(for: engine)
         let gatewayBaseURL = WuMindStore.shared.gatewayBaseURL
-        let accountID = WuMindStore.shared.managedAccountID
-        let gatewayUserToken = Keychain.wumindGatewayUserToken ?? ""
         let idempotencyKey = "drama-\(projectID.uuidString.prefix(8))-\(shotID.uuidString.prefix(8))-t\(nextTakeNumber)"
         let taskChainID = "drama-\(projectID.uuidString)"
 
@@ -369,6 +369,7 @@ final class WuMindShortDramaStore: ObservableObject {
                 "generationSeconds": "\(durationInt)",
                 "aspectRatio": "9:16",
                 "engine": engine.rawValue,
+                "channel": useManaged ? "managed" : "own_api",
             ],
             status: "in_progress",
             progress: 8,
@@ -376,19 +377,19 @@ final class WuMindShortDramaStore: ObservableObject {
         )
         let workID = workItem.id
 
-        let arkKey = Keychain.volcengineArkAPIKey ?? ""
+        let arkKey = !useManaged && engine == .seedance ? (Keychain.volcengineArkAPIKey ?? "") : ""
         let arkModel = arkModelID
         let arkURL = arkBaseURL.isEmpty ? nil : arkBaseURL
-        let klingAK = Keychain.klingAccessKey ?? ""
-        let klingSK = Keychain.klingSecretKey ?? ""
+        let klingAK = !useManaged && engine == .kling ? (Keychain.klingAccessKey ?? "") : ""
+        let klingSK = !useManaged && engine == .kling ? (Keychain.klingSecretKey ?? "") : ""
         let klingModel = klingModelName
         let klingGenMode = klingMode
         let klingURL = klingBaseURL.isEmpty ? nil : klingBaseURL
-        let grokKey = Keychain.providerChatAPIKey(.grok) ?? ""
+        let grokKey = !useManaged && engine == .grok ? (Keychain.providerChatAPIKey(.grok) ?? "") : ""
         let grokBase = AIProviderEndpoints.baseURL(for: .grok)
-        let openAIKey = Keychain.providerChatAPIKey(.openAI) ?? ""
+        let openAIKey = !useManaged && engine == .sora2 ? (Keychain.providerChatAPIKey(.openAI) ?? "") : ""
         let openAIBase = AIProviderEndpoints.baseURL(for: .openAI)
-        let geminiKey = Keychain.providerChatAPIKey(.gemini) ?? ""
+        let geminiKey = !useManaged && engine == .veo3 ? (Keychain.providerChatAPIKey(.gemini) ?? "") : ""
         let geminiBase = AIProviderEndpoints.baseURL(for: .gemini)
 
         activeTask = Task { [weak self] in
@@ -406,7 +407,17 @@ final class WuMindShortDramaStore: ObservableObject {
                 let resolvedModelID: String
                 var remoteWorkID: String? = nil
 
-                if let managedModel, !gatewayBaseURL.isEmpty, !gatewayUserToken.isEmpty {
+                if useManaged {
+                    let store = WuMindStore.shared
+                    guard let managedModel, store.channel == .managed, store.gatewayBaseURL == gatewayBaseURL else {
+                        throw AIVideoToolError.generationFailed("内置视频配置已改变，请重新选择当前镜头。")
+                    }
+                    let gatewayUserToken = try await store.ensureManagedAccount()
+                    guard store.channel == .managed, store.gatewayBaseURL == gatewayBaseURL,
+                          store.managedSessionToken == gatewayUserToken else {
+                        throw AIVideoToolError.generationFailed("当前账号或通道已改变，请重新选择当前镜头。")
+                    }
+                    let accountID = store.managedAccountID
                     resolvedModelID = managedModel.id
                     let client = WuMindGatewayClient()
                     let submitted = try await client.submitManagedVideo(

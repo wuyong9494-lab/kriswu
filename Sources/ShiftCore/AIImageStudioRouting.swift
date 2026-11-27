@@ -389,7 +389,7 @@ public enum AIImageStudioAvailability {
         if snapshot.useManagedGateway {
             guard snapshot.isGatewayConfigured else {
                 return .managedGatewayConfigInvalid(
-                    detail: "当前已选择 WuMind 内置，但网关地址未配置或格式无效（需 https:// 域名）。请前往设置修复 WuMind 网关配置，不会跳到配置 Google Gemini / 厂商 Key，也不会静默切至自有 API。"
+                    detail: "内置网关尚未配置或配置无效，请联系管理员处理。"
                 )
             }
             guard snapshot.isGatewayLoggedIn else {
