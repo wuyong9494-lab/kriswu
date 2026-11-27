@@ -102,6 +102,11 @@ jobs:
                      DeepSeekChatNavigationTests/testWorkbenchOpensOriginalTenToolsDirectly
                      DeepSeekChatNavigationTests/testDutyWorkbenchPassPlanAndTenderNavigation)
               ;;
+            history-studios)
+              tests=(DeepSeekChatNavigationTests/testLongHistoryReachesBothEndsAndKeepsReadingPositionDuringStreaming
+                     DeepSeekChatNavigationTests/testWorkbenchOpensOriginalTenToolsDirectly
+                     DeepSeekChatNavigationTests/testWuMindCleanLayoutAndToolSearch)
+              ;;
             appearance)
               tests=(DutyDeepLinkReviewTests
                      DutyPageReviewTests/testMemberRowsAndHolidaySummaryFromDirectory
