@@ -27,6 +27,7 @@ final class ShareViewController: UIViewController {
     private let saveButton = UIButton(type: .system)
     private let dismissButton = UIButton(type: .system)
     private let spinner = UIActivityIndicatorView(style: .medium)
+    private let actions = UIStackView()
     private var candidate: Candidate?
     private var saving = false
     private var saved = false
@@ -54,11 +55,11 @@ final class ShareViewController: UIViewController {
     }
 
     private func buildInterface() {
-        heading.text = "值班提醒 · 招标收件箱"
+        heading.text = "招标收件箱"
         heading.font = UIFont.preferredFont(forTextStyle: .title2)
         heading.adjustsFontForContentSizeCategory = true
         heading.numberOfLines = 0
-        information.text = "接收后只保存在本机，不会上传 DeepSeek。回到值班提醒，进「DeepSeek → 生成投标书草稿」选择即可。"
+        information.text = "文件保存在本机。打开「WuMind › 工作台 › 标书」即可选用。"
         information.font = UIFont.preferredFont(forTextStyle: .body)
         information.adjustsFontForContentSizeCategory = true
         information.numberOfLines = 0
@@ -69,19 +70,19 @@ final class ShareViewController: UIViewController {
         spinner.hidesWhenStopped = true
 
         var saveConfiguration = UIButton.Configuration.filled()
-        saveConfiguration.title = "接收到本机收件箱"
+        saveConfiguration.title = "保存到收件箱"
         saveButton.configuration = saveConfiguration
         saveButton.addTarget(self, action: #selector(save), for: .touchUpInside)
         dismissButton.setTitle("取消", for: .normal)
         dismissButton.addTarget(self, action: #selector(finish), for: .touchUpInside)
 
-        let row = UIStackView(arrangedSubviews: [dismissButton, saveButton, spinner])
-        row.axis = .horizontal
-        row.alignment = .center
-        row.distribution = .equalSpacing
-        row.spacing = 12
+        actions.addArrangedSubview(spinner)
+        actions.addArrangedSubview(dismissButton)
+        actions.addArrangedSubview(saveButton)
+        actions.spacing = 12
+        layoutActions()
 
-        let stack = UIStackView(arrangedSubviews: [heading, information, status, row])
+        let stack = UIStackView(arrangedSubviews: [heading, information, status])
         stack.axis = .vertical
         stack.spacing = 16
         let scroll = UIScrollView()
@@ -89,18 +90,41 @@ final class ShareViewController: UIViewController {
         stack.translatesAutoresizingMaskIntoConstraints = false
         scroll.addSubview(stack)
         view.addSubview(scroll)
+        actions.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(actions)
         let safe = view.safeAreaLayoutGuide
+        let saveHeight = saveButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 44)
+        saveHeight.priority = .defaultHigh
         NSLayoutConstraint.activate([
             scroll.leadingAnchor.constraint(equalTo: safe.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: safe.trailingAnchor),
             scroll.topAnchor.constraint(equalTo: safe.topAnchor),
-            scroll.bottomAnchor.constraint(equalTo: safe.bottomAnchor),
+            scroll.bottomAnchor.constraint(equalTo: actions.topAnchor),
+            actions.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: 20),
+            actions.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -20),
+            actions.bottomAnchor.constraint(equalTo: safe.bottomAnchor, constant: -12),
+            saveHeight,
+            dismissButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 44),
             stack.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor, constant: 20),
             stack.trailingAnchor.constraint(equalTo: scroll.contentLayoutGuide.trailingAnchor, constant: -20),
             stack.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: 20),
             stack.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor, constant: -20),
             stack.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor, constant: -40),
         ])
+    }
+
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        if previousTraitCollection?.preferredContentSizeCategory != traitCollection.preferredContentSizeCategory {
+            layoutActions()
+        }
+    }
+
+    private func layoutActions() {
+        let largeText = traitCollection.preferredContentSizeCategory.isAccessibilityCategory
+        actions.axis = largeText ? .vertical : .horizontal
+        actions.alignment = largeText ? .fill : .center
+        actions.distribution = largeText ? .fill : .equalSpacing
     }
 
     private static func admit(_ provider: NSItemProvider) -> Candidate? {
@@ -164,7 +188,7 @@ final class ShareViewController: UIViewController {
             saveButton.isHidden = true
             dismissButton.setTitle("完成", for: .normal)
             heading.text = "已接收到本机收件箱"
-            status.text = "「\(name)」已保存。点完成后，打开值班提醒 → DeepSeek → 生成投标书草稿。"
+            status.text = name
         case .failure(let failure):
             saveButton.isEnabled = true
             let safeMessage = (failure as? TenderShareInbox.Failure)?.errorDescription
@@ -172,6 +196,7 @@ final class ShareViewController: UIViewController {
                 ?? "文件须是可读取的 PDF 或 DOCX，最大 16 MB。请在微信里打开文件后重试。"
             status.text = "没有保存：\(safeMessage)"
         }
+        UIAccessibility.post(notification: .layoutChanged, argument: saved ? heading : status)
     }
 
     @objc private func finish() {

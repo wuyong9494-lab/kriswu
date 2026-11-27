@@ -87,6 +87,50 @@ final class WuMindStudioNavigationTests: XCTestCase {
         XCTAssertTrue(app.buttons["ai.ppt.sharePptx"].exists)
     }
 
+    func testShareLocalPDFToTenderInboxFromWorkbench() {
+        openTool("ppt", title: "幻灯片")
+        let build = app.buttons["ai.ppt.buildExecutiveReport"]
+        reveal(build)
+        build.tap()
+        let pdf = app.buttons["ai.ppt.sharePdf"]
+        reveal(pdf)
+        pdf.tap()
+
+        let shareTarget = app.descendants(matching: .any).matching(NSPredicate(
+            format: "label CONTAINS[c] %@ OR label CONTAINS %@", "Tender Import", "导入标书"
+        )).firstMatch
+        if !shareTarget.waitForExistence(timeout: 5) || !shareTarget.isHittable {
+            let more = app.buttons.matching(NSPredicate(format: "label IN %@", ["More", "更多"])).firstMatch
+            if !more.isHittable {
+                let activities = app.collectionViews.matching(identifier: "ActivityListView").firstMatch
+                if activities.isHittable { activities.swipeLeft() }
+            }
+            tap(more)
+        }
+        tap(shareTarget)
+        let save = app.buttons["保存到收件箱"]
+        XCTAssertTrue(save.waitForExistence(timeout: 12) && save.isEnabled)
+        XCTAssertGreaterThanOrEqual(save.frame.height, 44)
+        capture("Tender-ShareExtension-Ready")
+        save.tap()
+        XCTAssertTrue(app.staticTexts["已接收到本机收件箱"].waitForExistence(timeout: 10))
+        let receipt = app.staticTexts.matching(NSPredicate(format: "label ENDSWITH[c] %@", ".pdf")).firstMatch
+        XCTAssertTrue(receipt.exists)
+        let filename = receipt.label
+        capture("Tender-ShareExtension-Saved")
+        tap(app.buttons["完成"])
+        let deck = navigationBar("幻灯片")
+        deck.buttons.element(boundBy: 0).tap()
+        let tender = app.buttons["deepSeek.chat.tender"]
+        reveal(tender)
+        tender.tap()
+        let savedDocument = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", filename)).firstMatch
+        reveal(savedDocument)
+        savedDocument.tap()
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", filename)).firstMatch.exists
+                      || savedDocument.label.contains("已选中"))
+    }
+
     func testWorksReopensOriginalPPTAndExportsEditedVersion() throws {
         let titles = try buildAndEditLocalDeck()
         navigationBar("幻灯片").buttons.element(boundBy: 0).tap()

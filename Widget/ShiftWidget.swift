@@ -113,9 +113,10 @@ struct ShiftWidgetView: View {
                     .opacity(0.9)
                 Spacer(minLength: 0)
                 Text(todayTitle)
-                    .font(.system(size: 44, weight: .heavy, design: .rounded))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.35)
+                    .font(.system(.largeTitle, design: .rounded, weight: .bold))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.74)
+                    .layoutPriority(1)
                 Spacer(minLength: 0)
                 Text("明天：\(tomorrowTitle)")
                     .font(.caption)
@@ -145,13 +146,14 @@ struct ShiftWidgetView: View {
             Text(label).font(.caption.weight(.semibold)).opacity(0.9)
             Spacer(minLength: 0)
             Text(title)
-                .font(.system(size: big ? 40 : 28, weight: .heavy, design: .rounded))
-                .lineLimit(1)
-                .minimumScaleFactor(0.35)
+                .font(.system(big ? .largeTitle : .title, design: .rounded, weight: .bold))
+                .lineLimit(2)
+                .minimumScaleFactor(0.74)
             Spacer(minLength: 0)
         }
         .foregroundStyle(.white)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -327,6 +329,8 @@ struct WeekWidget: Widget {
                     .padding(.vertical, 6)
                     .background((d.day.map { Color(hex: $0.colorHex) } ?? .gray).opacity(0.22),
                                 in: RoundedRectangle(cornerRadius: 8))
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(Text("\(d.label)，\(d.day?.title ?? "暂无排班数据")"))
                 }
             }
             .widgetPadding(10)
@@ -444,7 +448,7 @@ struct NextDutyView: View {
                 Text("📡 下次遥测").font(.caption.weight(.semibold))
                 Spacer(minLength: 0)
                 HStack(alignment: .firstTextBaseline, spacing: 2) {
-                    Text(big).font(.system(size: 44, weight: .heavy, design: .rounded)).minimumScaleFactor(0.4)
+                    Text(big).font(.system(.largeTitle, design: .rounded, weight: .bold)).lineLimit(1).minimumScaleFactor(0.75)
                     if let n = entry.next, n.days > 0 { Text("天后").font(.caption) }
                 }
                 Spacer(minLength: 0)
@@ -456,7 +460,7 @@ struct NextDutyView: View {
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             .widgetPadding()
-            .widgetBackground(Color(hex: "#17A2B8").gradient)
+            .widgetBackground(Color(hex: "#126776").gradient)
         }
     }
 }
@@ -521,7 +525,7 @@ struct CaptureWidgetView: View {
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .padding(family == .systemLarge ? 16 : 12)
+        .widgetPadding(family == .systemLarge ? 16 : 12)
         .widgetBackground(Color(.systemBackground))
     }
 
@@ -536,6 +540,7 @@ struct CaptureWidgetView: View {
             .padding(.vertical, 8)
             .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
+        .accessibilityLabel(title)
     }
 
     @ViewBuilder
@@ -673,8 +678,9 @@ struct TeamDutyView: View {
                 Text("📡 谁值遥测").font(.caption.weight(.semibold)).opacity(0.9)
                 Spacer(minLength: 0)
                 Text("今天").font(.caption2).opacity(0.85)
-                Text(todayText).font(.system(size: 26, weight: .heavy, design: .rounded))
-                    .lineLimit(2).minimumScaleFactor(0.5)
+                Text(todayText).font(.system(.title2, design: .rounded, weight: .bold))
+                    .lineLimit(2).minimumScaleFactor(0.75)
+                    .layoutPriority(1)
                 Spacer(minLength: 0)
                 Text("明天 \(tomorrowText)").font(.caption).lineLimit(1).minimumScaleFactor(0.6).opacity(0.9)
             }
