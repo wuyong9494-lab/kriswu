@@ -1112,7 +1112,7 @@ struct AIVideoToolView: View {
                 // Cancelled cleanly
             } catch {
                 let msg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-                let phase = activeJobID == nil ? "提交" : ((progress?.percent ?? 0) >= 94 ? "下载" : "查询")
+                let phase = activeJobID == nil ? "提交" : (progress?.downloading == true ? "下载" : "查询")
                 let detail = "自有 Key 视频" + phase + "失败（" + selectedModel.id + "）：" + msg
                 errorMessage = detail
                 WuMindWorksStore.shared.failWork(id: work.id, errorMessage: detail)
@@ -1167,6 +1167,7 @@ struct AIVideoToolView: View {
             progress = nil
         }
 
+        var downloading = false
         var upstreamConfirmedFailed = false
         do {
             var current: WuMindManagedVideoJob
@@ -1211,6 +1212,7 @@ struct AIVideoToolView: View {
                 return
             }
 
+            downloading = true
             progress = .init(stage: "正在下载 MP4 成片…", percent: 95, elapsedSeconds: Date().timeIntervalSince(job.started))
             let mp4Data = try await WuMindGatewayClient().downloadManagedVideoContent(
                 gatewayURL: wmStore.gatewayBaseURL,
@@ -1255,7 +1257,7 @@ struct AIVideoToolView: View {
                 upstreamConfirmedFailed: upstreamConfirmedFailed
             )
             if classification == .pollStatusUnconfirmed {
-                let phase = progress?.percent == 95 ? "成片下载" : "原任务状态查询"
+                let phase = downloading ? "成片下载" : "原任务状态查询"
                 let notice = "\(phase)受阻，暂时无法确认云端进度（\(msg)）。服务器可能仍在生成，请点下方「恢复查询进度（原任务）」，不会重复生成或扣费。"
                 unconfirmedJob = job
                 errorMessage = notice

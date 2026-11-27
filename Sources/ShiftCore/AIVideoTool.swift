@@ -157,12 +157,14 @@ public struct AIVideoTool: Sendable {
         public let percent: Int?
         public let elapsedSeconds: Double
         public let jobID: String?
+        public let downloading: Bool
 
-        public init(stage: String, percent: Int?, elapsedSeconds: Double, jobID: String? = nil) {
+        public init(stage: String, percent: Int?, elapsedSeconds: Double, jobID: String? = nil, downloading: Bool = false) {
             self.stage = stage
             self.percent = percent
             self.elapsedSeconds = elapsedSeconds
             self.jobID = jobID
+            self.downloading = downloading
         }
     }
 
@@ -677,7 +679,7 @@ public struct AIVideoTool: Sendable {
                     stage: "渲染完成，正在下载成片 MP4…",
                     percent: 95,
                     elapsedSeconds: Date().timeIntervalSince(started),
-                    jobID: job.id
+                    jobID: job.id, downloading: true
                 ))
                 if let directURLStr = current.downloadURL, let dlURL = URL(string: directURLStr) {
                     let mp4 = try await fetchSameOrTrustedVideoURL(dlURL, provider: model.provider, apiKey: apiKey, baseURL: baseURL, forceBearer: forceBearer)
@@ -784,7 +786,7 @@ public struct AIVideoTool: Sendable {
                             stage: "渲染完成，等待视频文件就绪并下载…",
                             percent: 92,
                             elapsedSeconds: Date().timeIntervalSince(started),
-                            jobID: interactionID
+                            jobID: interactionID, downloading: true
                         ))
                         try await waitForGeminiFileActiveIfNeeded(downloadURL: dlURL, apiKey: apiKey, baseURL: options.customBaseURL)
                         let mp4 = try await fetchSameOrTrustedVideoURL(dlURL, provider: .gemini, apiKey: apiKey, baseURL: options.customBaseURL, forceBearer: false)
@@ -889,7 +891,7 @@ public struct AIVideoTool: Sendable {
                 return inline
             }
             if let downloadURLStr = polled.video?.url, let dlURL = URL(string: downloadURLStr) {
-                await onProgress?(ProgressUpdate(stage: "正在下载视频文件…", percent: 94, elapsedSeconds: Date().timeIntervalSince(started), jobID: reqID))
+                await onProgress?(ProgressUpdate(stage: "正在下载视频文件…", percent: 94, elapsedSeconds: Date().timeIntervalSince(started), jobID: reqID, downloading: true))
                 let mp4 = try await fetchSameOrTrustedVideoURL(dlURL, provider: .grok, apiKey: apiKey, baseURL: options.customBaseURL, forceBearer: false)
                 guard Self.isValidMP4(mp4) else { throw AIVideoToolError.invalidVideoData }
                 return mp4
@@ -939,7 +941,7 @@ public struct AIVideoTool: Sendable {
                 }
                 if let uri = current.response?.generateVideoResponse?.generatedSamples?.first?.video?.uri,
                    let dlURL = URL(string: uri) {
-                    await onProgress?(ProgressUpdate(stage: "正在下载 Veo 视频…", percent: 94, elapsedSeconds: Date().timeIntervalSince(started), jobID: opName))
+                    await onProgress?(ProgressUpdate(stage: "正在下载 Veo 视频…", percent: 94, elapsedSeconds: Date().timeIntervalSince(started), jobID: opName, downloading: true))
                     let mp4 = try await fetchSameOrTrustedVideoURL(dlURL, provider: .gemini, apiKey: apiKey, baseURL: options.customBaseURL, forceBearer: false)
                     guard Self.isValidMP4(mp4) else { throw AIVideoToolError.invalidVideoData }
                     return mp4
@@ -977,16 +979,28 @@ public struct AIVideoTool: Sendable {
             req.httpBody = try JSONSerialization.data(withJSONObject: body)
         }
         try AIProviderToolHTTP.authorizeRelay(&req, provider: provider, apiKey: apiKey, baseURL: baseURL, forceBearer: forceBearer)
-        // Only reads may be replayed. A lost POST response can still represent a paid job.
-        while true {
-            do {
-                let (data, _) = try await AIProviderToolHTTP.dataWithDiagnostics(
+        if method == "GET" {
+            return try await retryInterruptedRead {
+                try await AIProviderToolHTTP.dataWithDiagnostics(
                     for: req, provider: provider, maxBytes: maxBytes,
                     baseURL: baseURL, transport: transport
-                )
-                return data
-            } catch let error as MultiProviderAIError where method == "GET" &&
-                (error == .networkError || error == .timedOut) {
+                ).data
+            }
+        }
+        return try await AIProviderToolHTTP.dataWithDiagnostics(
+            for: req, provider: provider, maxBytes: maxBytes, baseURL: baseURL, transport: transport
+        ).data
+    }
+
+    // Keep the current read across connectivity loss. Never replay a paid submission.
+    private func retryInterruptedRead<T>(_ read: () async throws -> T) async throws -> T {
+        while true {
+            try Task.checkCancellation()
+            do {
+                return try await read()
+            } catch let error as MultiProviderAIError where error == .networkError || error == .timedOut {
+                try await Task.sleep(nanoseconds: max(1_000_000, pollIntervalNanoseconds))
+            } catch let error as URLError where [.notConnectedToInternet, .networkConnectionLost, .timedOut].contains(error.code) {
                 try await Task.sleep(nanoseconds: max(1_000_000, pollIntervalNanoseconds))
             }
         }
@@ -1003,13 +1017,12 @@ public struct AIVideoTool: Sendable {
             var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 180)
             req.httpMethod = "GET"
             try AIProviderToolHTTP.authorizeRelay(&req, provider: provider, apiKey: apiKey, baseURL: baseURL, forceBearer: forceBearer)
-            let (data, status) = try await AIProviderToolHTTP.dataWithDiagnostics(
-                for: req,
-                provider: provider,
-                maxBytes: Self.videoByteLimit,
-                baseURL: baseURL,
-                transport: transport
-            )
+            let (data, status) = try await retryInterruptedRead {
+                try await AIProviderToolHTTP.dataWithDiagnostics(
+                    for: req, provider: provider, maxBytes: Self.videoByteLimit,
+                    baseURL: baseURL, transport: transport
+                )
+            }
             if status == 202 && attempt < 7 {
                 try await Task.sleep(nanoseconds: pollIntervalNanoseconds)
                 continue
@@ -1042,11 +1055,12 @@ public struct AIVideoTool: Sendable {
         req.httpShouldHandleCookies = false
         let result: (Data, URLResponse)
         if let transport {
-            result = try await transport(req)
+            result = try await retryInterruptedRead { try await transport(req) }
         } else {
             let cfg = URLSessionConfiguration.ephemeral
             cfg.httpShouldSetCookies = false
-            result = try await URLSession(configuration: cfg).data(for: req)
+            let session = URLSession(configuration: cfg)
+            result = try await retryInterruptedRead { try await session.data(for: req) }
         }
         guard let http = result.1 as? HTTPURLResponse, (200..<300).contains(http.statusCode),
               result.0.count <= Self.videoByteLimit else {
