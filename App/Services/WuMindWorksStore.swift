@@ -571,7 +571,10 @@ final class WuMindWorksStore: ObservableObject {
     }
 
     /// Recover by GET against the original job ID, including after returning from lock screen.
-    func refreshInProgressVideoWork(_ work: WuMindLocalWork, client: WuMindGatewayClient = .init()) async -> WuMindLocalWork? {
+    func refreshInProgressVideoWork(
+        _ work: WuMindLocalWork, client: WuMindGatewayClient = .init(),
+        sessionToken: () -> String? = { Keychain.wumindGatewayUserToken }
+    ) async -> WuMindLocalWork? {
         guard let work = works.first(where: { $0.id == work.id }) else { return nil }
         guard work.workType == .video, let jobID = work.upstreamJobID,
               WuMindBackgroundVideoRecovery.canQuery(
@@ -592,13 +595,13 @@ final class WuMindWorksStore: ObservableObject {
             }
             return works.first { $0.id == work.id }
         }
-        guard wmStore.hasGatewayURL, let token = Keychain.wumindGatewayUserToken, !token.isEmpty,
+        guard wmStore.hasGatewayURL, let token = sessionToken(), !token.isEmpty,
               recoveringVideoJobs.insert(jobID).inserted else { return work }
         defer { recoveringVideoJobs.remove(jobID) }
         func requestStillCurrent() -> Bool {
             !Task.isCancelled && currentOwnerID == owner && activeOwnerID == owner
                 && origin.matches(gateway: wmStore.gatewayBaseURL, accountID: wmStore.managedAccountID, jobID: jobID)
-                && Keychain.wumindGatewayUserToken == token
+                && sessionToken() == token
                 && works.contains { $0.id == work.id && $0.upstreamJobID == jobID && localAssetURL(for: $0) == nil }
         }
         do {

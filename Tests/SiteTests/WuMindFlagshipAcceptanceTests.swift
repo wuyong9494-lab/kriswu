@@ -27,8 +27,8 @@ final class WuMindFlagshipAcceptanceTests: XCTestCase {
             "requirements": rows, "missing_facts": ["出版社授权、合同及发票"], "warnings": []])
         let result = try await DeepSeekTenderClient.generate(data: pdf, filename: url.lastPathComponent, apiKey: "fixture") { request in
             let body: Data
-            if request.url?.path == "/files" { body = Data(#"{"id":"file-library-fixture"}"#.utf8) }
-            else if request.httpMethod == "DELETE" { body = Data(#"{"id":"file-library-fixture","deleted":true}"#.utf8) }
+            if request.url?.path == "/files" { body = Data(#"{"id":"file-api-library-fixture"}"#.utf8) }
+            else if request.httpMethod == "DELETE" { body = Data(#"{"id":"file-api-library-fixture","deleted":true}"#.utf8) }
             else {
                 let pro = String(decoding: request.httpBody ?? Data(), as: UTF8.self).contains("deepseek-v4-pro")
                 body = pro ? draft : evidence
@@ -80,8 +80,6 @@ final class WuMindFlagshipAcceptanceTests: XCTestCase {
         let b = "https://b.example.invalid/fixture"
         wm.gatewayBaseURL = a
         wm.managedAccountID = "fixture-" + UUID().uuidString
-        XCTAssertTrue(Keychain.setWuMindGatewayUserToken("offline-fixture"))
-        defer { _ = Keychain.setWuMindGatewayUserToken("") }
         works.reloadForCurrentAccount()
         let work = works.recordSubmittedTask(workType: .video, title: "样例", prompt: "样例", modelID: "sample",
                                              params: ["channel":"managed"], syncToCloud: false)
@@ -91,11 +89,11 @@ final class WuMindFlagshipAcceptanceTests: XCTestCase {
                              videoJobOrigin: .init(gateway: a, accountID: wm.managedAccountID, jobID: job.id))
         wm.gatewayBaseURL = b
         works.reloadForCurrentAccount()
-        let blocked = await works.refreshInProgressVideoWork(work, client: client)
+        let blocked = await works.refreshInProgressVideoWork(work, client: client, sessionToken: { "offline-fixture" })
         XCTAssertTrue(blocked?.errorMessage?.contains("切回") == true)
         wm.gatewayBaseURL = a
         works.reloadForCurrentAccount()
-        let restored = await works.refreshInProgressVideoWork(work, client: client)
+        let restored = await works.refreshInProgressVideoWork(work, client: client, sessionToken: { "offline-fixture" })
         XCTAssertEqual(restored?.upstreamJobID, job.id)
         XCTAssertEqual(restored?.status, "in_progress")
         let calls = await requests.calls
