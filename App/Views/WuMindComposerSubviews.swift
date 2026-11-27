@@ -361,12 +361,12 @@ struct WuMindComposerActionButtons: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                 }
-                .foregroundStyle(store.webSearchEnabled ? .white : .primary)
+                .foregroundStyle(store.webSearchEnabled ? Color.primary : Color.secondary)
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, 5)
                 .padding(.vertical, 6)
                 .background(
-                    store.webSearchEnabled ? Color.blue : Color.secondary.opacity(0.11),
+                    store.webSearchEnabled ? Color.primary.opacity(0.16) : Color.secondary.opacity(0.08),
                     in: Capsule()
                 )
             }
@@ -388,12 +388,12 @@ struct WuMindComposerActionButtons: View {
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
                     }
-                    .foregroundStyle(store.deepThinking ? .white : .secondary)
+                    .foregroundStyle(store.deepThinking ? Color.primary : Color.secondary)
                     .frame(maxWidth: .infinity)
                     .padding(.horizontal, 5)
                     .padding(.vertical, 6)
                     .background(
-                        store.deepThinking ? activeAccentColor : Color.secondary.opacity(0.11),
+                        store.deepThinking ? Color.primary.opacity(0.16) : Color.secondary.opacity(0.08),
                         in: Capsule()
                     )
                 }
@@ -415,12 +415,12 @@ struct WuMindComposerActionButtons: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                 }
-                .foregroundStyle(store.agentModeEnabled ? .white : .primary)
+                .foregroundStyle(store.agentModeEnabled ? Color.primary : Color.secondary)
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, 5)
                 .padding(.vertical, 6)
                 .background(
-                    store.agentModeEnabled ? Color.purple : Color.secondary.opacity(0.11),
+                    store.agentModeEnabled ? Color.primary.opacity(0.16) : Color.secondary.opacity(0.08),
                     in: Capsule()
                 )
             }
@@ -546,22 +546,19 @@ struct WuMindComposerActionButtons: View {
 
             Button(action: onOpenModelHub) {
                 HStack(spacing: 5) {
-                    Image(systemName: store.channel == .managed ? "bolt.shield.fill" : store.activeProviderForDisplay.iconName)
-                        .font(.system(size: 11.5, weight: .semibold))
-                        .foregroundStyle(activeAccentColor)
-                    Text(compactModelTitle)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.85)
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.system(size: 9.5, weight: .semibold))
+                    Image(systemName: "slider.horizontal.3")
+                        .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(.secondary)
+                    if isFocused {
+                        Text(compactModelTitle)
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                    }
                 }
-                .padding(.horizontal, 11)
-                .padding(.vertical, 7.5)
-                .background(activeAccentColor.opacity(0.11), in: Capsule())
-                .overlay(Capsule().strokeBorder(activeAccentColor.opacity(0.25), lineWidth: 0.8))
+                .padding(.horizontal, isFocused ? 10 : 0)
+                .frame(minWidth: 36, minHeight: 36)
+                .background(Color.secondary.opacity(0.11), in: Capsule())
             }
             .buttonStyle(.plain)
             .disabled(generating)
@@ -619,16 +616,9 @@ struct WuMindComposerActionButtons: View {
                 Button(action: onOpenRealtimeVoice) {
                     Image(systemName: "waveform")
                         .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 34, height: 34)
-                        .background(
-                            LinearGradient(
-                                colors: [Color(red: 0.20, green: 0.56, blue: 0.98), Color(red: 0.48, green: 0.32, blue: 0.96)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            in: Circle()
-                        )
+                        .foregroundStyle(Color(uiColor: .systemBackground))
+                        .frame(width: 38, height: 38)
+                        .background(Color.primary, in: Circle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("开始实时语音通话")

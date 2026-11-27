@@ -9,6 +9,52 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         }
     }
 
+    func testWuMindCleanLayoutAndToolSearch() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-demo", "-screen", "wumind"]
+        ensurePortrait()
+        app.launch()
+        defer { app.terminate() }
+
+        let greeting = app.staticTexts["wumind.chat.greeting"]
+        let chat = app.buttons["wumind.tab.chat"]
+        let workbench = app.buttons["wumind.tab.workbench"]
+        XCTAssertTrue(greeting.waitForExistence(timeout: 15))
+        XCTAssertTrue(chat.isHittable && workbench.isHittable)
+        XCTAssertGreaterThan(chat.frame.midY, greeting.frame.midY)
+        XCTAssertTrue(app.buttons["wumind.composer.dictate"].isHittable, "语音通话保留在对话首屏")
+        let chatShot = XCTAttachment(screenshot: app.screenshot())
+        chatShot.name = "WuMind-clean-chat"
+        chatShot.lifetime = .keepAlways
+        add(chatShot)
+
+        workbench.tap()
+        let search = app.textFields["wumind.workbench.search"]
+        XCTAssertTrue(search.waitForExistence(timeout: 8))
+        let image = app.buttons["wumind.quick.image"]
+        let video = app.buttons["wumind.quick.video"]
+        let ppt = app.buttons["wumind.quick.ppt"]
+        XCTAssertTrue(image.isHittable && video.isHittable && ppt.isHittable)
+        XCTAssertLessThan(image.frame.midX, video.frame.midX)
+        XCTAssertEqual(image.frame.midY, video.frame.midY, accuracy: 4)
+        XCTAssertLessThan(ppt.frame.midY, search.frame.midY)
+        XCTAssertFalse(app.buttons["wumind.workbench.pipeline.ppt"].exists)
+        let workbenchShot = XCTAttachment(screenshot: app.screenshot())
+        workbenchShot.name = "WuMind-clean-workbench"
+        workbenchShot.lifetime = .keepAlways
+        add(workbenchShot)
+
+        search.tap()
+        search.typeText("PPT")
+        XCTAssertTrue(ppt.isHittable)
+        XCTAssertFalse(video.exists)
+        let clear = app.buttons["wumind.workbench.clearSearch"]
+        XCTAssertTrue(clear.isHittable)
+        clear.tap()
+        XCTAssertTrue(video.waitForExistence(timeout: 5))
+    }
+
     func testWorkspaceLauncherHomeColdStartRoundTripAndDraftPreservation() {
         continueAfterFailure = false
         let app = XCUIApplication()
@@ -131,6 +177,8 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertTrue(app.buttons["wumind.tab.chat"].exists, "缺少对话主标签")
         XCTAssertTrue(app.buttons["wumind.tab.workbench"].exists, "缺少工作台主标签")
         XCTAssertTrue(app.buttons["wumind.tab.works"].exists, "缺少作品主标签")
+        XCTAssertTrue(app.staticTexts["wumind.chat.greeting"].exists, "空白聊天缺少居中问候")
+        XCTAssertGreaterThan(app.buttons["wumind.tab.chat"].frame.midY, composer.frame.midY, "主标签应位于输入框下方")
         XCTAssertTrue(app.buttons["wumind.webSearch.toggle"].exists, "对话框下方缺少一键联网搜索开关")
         XCTAssertTrue(app.buttons["deepSeek.chat.thinking"].exists, "缺少深度思考切换胶囊")
         XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "wumind.attach.open").firstMatch.exists,
@@ -201,26 +249,46 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         let workbenchTab = app.buttons["wumind.tab.workbench"]
         XCTAssertTrue(workbenchTab.waitForExistence(timeout: 6) && workbenchTab.isHittable)
         workbenchTab.tap()
-        XCTAssertTrue(app.buttons["wumind.workbench.newTask"].waitForExistence(timeout: 8), "工作台缺少顶部「新建任务」按钮")
-        XCTAssertTrue(app.buttons["wumind.quick.image"].exists, "工作台缺少文字生图入口")
-        XCTAssertTrue(app.buttons["wumind.quick.video"].exists, "工作台缺少 AI 生视频入口")
-        XCTAssertTrue(app.buttons["wumind.quick.ppt"].exists, "工作台缺少 AI 写 PPT 入口")
-        XCTAssertTrue(app.buttons["deepSeek.chat.tender"].exists, "工作台缺少写投标书入口")
-        XCTAssertTrue(app.buttons["wumind.quick.plugins"].exists, "工作台缺少插件与连接入口")
-        XCTAssertTrue(app.buttons["wumind.quick.research"].exists, "工作台缺少深度调研入口")
-        XCTAssertTrue(app.buttons["wumind.workbench.pipeline.ppt"].exists, "工作台缺少 PPT 多步续作流水线")
-        XCTAssertTrue(app.buttons["wumind.workbench.pipeline.3d"].exists, "工作台缺少 3D 空间多步流水线")
+        let workbenchSearch = app.textFields["wumind.workbench.search"]
+        XCTAssertTrue(workbenchSearch.waitForExistence(timeout: 8), "工作台缺少底部搜索")
+        XCTAssertTrue(app.buttons["wumind.workbench.settings"].isHittable, "工作台设置入口不可点击")
+        XCTAssertTrue(app.buttons["wumind.quick.image"].exists, "工作台缺少生图入口")
+        XCTAssertTrue(app.buttons["wumind.quick.video"].exists, "工作台缺少视频入口")
+        XCTAssertTrue(app.buttons["wumind.quick.ppt"].exists, "工作台缺少 PPT 入口")
+        XCTAssertTrue(app.buttons["deepSeek.chat.tender"].exists, "工作台缺少标书入口")
+        XCTAssertFalse(app.buttons["wumind.workbench.pipeline.ppt"].exists, "低频续作不应挤占首屏")
         let workbenchShot = XCTAttachment(screenshot: app.screenshot())
         workbenchShot.name = "WuMind-workbench"
         workbenchShot.lifetime = .keepAlways
         add(workbenchShot)
 
-        // Scroll to bottom of Workbench to verify Projects, Schedules, and Wallet
+        workbenchSearch.tap()
+        workbenchSearch.typeText("PPT")
+        XCTAssertTrue(app.buttons["wumind.quick.ppt"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["wumind.quick.video"].exists, "搜索应隐藏不匹配入口")
+        let clearSearch = app.buttons["wumind.workbench.clearSearch"]
+        XCTAssertTrue(clearSearch.waitForExistence(timeout: 5))
+        clearSearch.tap()
+        XCTAssertTrue(app.buttons["wumind.quick.video"].waitForExistence(timeout: 5))
+
+        let resume = app.buttons["wumind.workbench.continue"]
+        for _ in 0..<3 where !resume.isHittable { app.swipeUp() }
+        XCTAssertTrue(resume.isHittable, "找不到继续编辑")
+        resume.tap()
+        let pptPipeline = app.buttons["wumind.workbench.pipeline.ppt"]
+        for _ in 0..<2 where !pptPipeline.isHittable { app.swipeUp() }
+        XCTAssertTrue(pptPipeline.isHittable, "展开后缺少 PPT 续作入口")
+        let spatialPipeline = app.buttons["wumind.workbench.pipeline.3d"]
+        for _ in 0..<2 where !spatialPipeline.isHittable { app.swipeUp() }
+        XCTAssertTrue(spatialPipeline.isHittable, "展开后缺少 3D 续作入口")
+
+        let manage = app.buttons["wumind.workbench.manage"]
+        for _ in 0..<4 where !manage.isHittable { app.swipeUp() }
+        XCTAssertTrue(manage.isHittable, "找不到空间与账户管理")
+        manage.tap()
         let walletBtn = app.buttons["wumind.wallet.open"]
-        for _ in 0..<3 where !walletBtn.isHittable {
-            app.swipeUp()
-            usleep(250_000)
-        }
+        for _ in 0..<3 where !walletBtn.isHittable { app.swipeUp() }
+        XCTAssertTrue(walletBtn.isHittable, "展开后缺少钱包入口")
 
         // Open Projects Workspace sheet and capture proof screenshot
         let projectsDock = app.buttons["wumind.dock.projects"]

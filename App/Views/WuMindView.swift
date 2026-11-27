@@ -238,13 +238,13 @@ struct WuMindWorkspaceView: View {
 
     private var canvasBackground: Color {
         colorScheme == .dark
-            ? Color(red: 0.06, green: 0.07, blue: 0.09)
-            : Color(red: 0.965, green: 0.97, blue: 0.985)
+            ? Color(white: 0.035)
+            : Color(white: 0.975)
     }
 
     private var elevatedSurface: Color {
         colorScheme == .dark
-            ? Color(red: 0.11, green: 0.125, blue: 0.155)
+            ? Color(white: 0.105)
             : Color.white
     }
 
@@ -257,9 +257,6 @@ struct WuMindWorkspaceView: View {
             ZStack(alignment: .leading) {
                 VStack(spacing: 0) {
                     topBar
-                    if !composerFocused || selectedMainTab != .chat {
-                        mainTabSwitcherBar
-                    }
                     upstreamBalanceNoticeBanner
                     if selectedMainTab == .chat {
                         if let prompt = store.searchContinuationPrompt,
@@ -333,6 +330,7 @@ struct WuMindWorkspaceView: View {
                             onOpenInChatConnectors: { showingInChatConnectors = true },
                             onOpenWallet: { showingWallet = true },
                             onOpenModelHub: { showingModelHub = true },
+                            onOpenSettings: { showingSettings = true },
                             onSwitchToWorks: {
                                 withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) {
                                     selectedMainTab = .works
@@ -372,6 +370,9 @@ struct WuMindWorkspaceView: View {
                                 }
                             }
                         )
+                    }
+                    if !composerFocused || selectedMainTab != .chat {
+                        mainTabSwitcherBar
                     }
                 }
                 .background(canvasBackground.ignoresSafeArea())
@@ -1078,42 +1079,37 @@ struct WuMindWorkspaceView: View {
     }
 
     private var mainTabSwitcherBar: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 0) {
             ForEach(WuMindMainTab.allCases) { tab in
                 let active = selectedMainTab == tab
                 Button {
                     dismissKeyboard()
                     Haptics.select()
-                    withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                    withAnimation(.easeInOut(duration: 0.18)) {
                         selectedMainTab = tab
                     }
                 } label: {
-                    HStack(spacing: 5) {
+                    VStack(spacing: 4) {
                         Image(systemName: tab.iconName)
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.system(size: 17, weight: .medium))
                         Text(tab.rawValue)
-                            .font(.system(size: 12.5, weight: .semibold, design: .rounded))
+                            .font(.caption2.weight(active ? .semibold : .regular))
                     }
-                    .foregroundStyle(active ? .white : .secondary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 7)
-                    .background(
-                        active ? activeAccentColor : Color.clear,
-                        in: Capsule()
-                    )
+                    .foregroundStyle(active ? Color.primary : Color.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 48)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityAddTraits(active ? .isSelected : [])
                 .accessibilityIdentifier(tab.accessibilityID)
             }
         }
-        .padding(3)
-        .background(elevatedSurface, in: Capsule())
-        .overlay(Capsule().strokeBorder(subtleBorder, lineWidth: 1))
-        .padding(.horizontal, 16)
-        .padding(.bottom, 6)
-        .frame(maxWidth: 420)
+        .frame(maxWidth: 470)
+        .padding(.horizontal, 12)
         .frame(maxWidth: .infinity)
-        .background(canvasBackground)
+        .background(alignment: .top) {
+            Rectangle().fill(subtleBorder).frame(height: 1)
+        }
     }
 
     private var headerModelTitle: String {
@@ -1135,6 +1131,7 @@ struct WuMindWorkspaceView: View {
                     LazyVStack(alignment: .leading, spacing: 22) {
                         if turns.isEmpty {
                             welcomeCanvas
+                                .frame(minHeight: max(0, viewportGeo.size.height - 44))
                         } else {
                             if !isTemporaryChat,
                                let convo = store.activeConversation,
@@ -1387,130 +1384,57 @@ struct WuMindWorkspaceView: View {
     }
 
     private var welcomeCanvas: some View {
-        VStack(spacing: 24) {
-            Spacer(minLength: 42)
+        VStack(spacing: 18) {
+            Spacer(minLength: 26)
+            Text(isTemporaryChat ? "临时聊天" : "今天想聊点什么？")
+                .font(.title.weight(.semibold))
+                .foregroundStyle(.primary)
+                .multilineTextAlignment(.center)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("wumind.chat.greeting")
 
-            // 1. Serene ChatGPT / Gemini Flagship Greeting (Zero Home Clutter)
-            VStack(spacing: 14) {
-                ZStack {
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: isTemporaryChat
-                                    ? [Color.orange, Color.pink]
-                                    : [
-                                        Color(red: 0.24, green: 0.48, blue: 1.0),
-                                        Color(red: 0.54, green: 0.34, blue: 0.96),
-                                        Color(red: 0.14, green: 0.74, blue: 0.80)
-                                    ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 54, height: 54)
-                        .shadow(color: (isTemporaryChat ? Color.orange : Color(red: 0.30, green: 0.46, blue: 1.0)).opacity(0.28), radius: 16, y: 6)
-                    Image(systemName: isTemporaryChat ? "eye.slash.fill" : "sparkles")
-                        .font(.system(size: 24, weight: .bold))
-                        .foregroundStyle(.white)
-                }
-
-                Text(isTemporaryChat ? "临时聊天" : "今天想做什么？")
-                    .font(.system(size: 26, weight: .bold, design: .rounded))
-                    .foregroundStyle(.primary)
-                    .multilineTextAlignment(.center)
-
-                if isTemporaryChat {
-                    Text("无痕对话 · 关闭即销毁，不保存历史与长期记忆")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-            }
-
-            // 2. Maximum 3 Clean Flagship Starter Pills
-            VStack(spacing: 10) {
+            if !isTemporaryChat {
                 if !AppAccountManager.shared.isExternalRestricted && !isStandaloneFullScreen {
-                    minimalStarterPill(
-                        icon: "calendar.badge.clock",
-                        color: .indigo,
-                        title: "今日值班与休息查询",
-                        id: "wumind.starter.dutyToday"
-                    ) {
+                    welcomeSuggestion("查今天的值班", icon: "calendar", id: "wumind.starter.dutyToday") {
                         draftState.setText("今天谁值班、哪组休息、谁请假或出差？")
                         composerFocused = true
                     }
                 } else {
-                    minimalStarterPill(
-                        icon: "globe.asia.australia.fill",
-                        color: .blue,
-                        title: "联网核验调研",
-                        id: "wumind.starter.webResearch"
-                    ) {
+                    welcomeSuggestion("联网查资料", icon: "globe", id: "wumind.starter.webResearch") {
                         store.webSearchEnabled = true
                         draftState.setText("请帮我联网查证并整理最新进展，标注原文来源：")
                         composerFocused = true
                     }
                 }
-
-                minimalStarterPill(
-                    icon: "rectangle.on.rectangle.angled",
-                    color: .orange,
-                    title: "上传文档 / 表格制作 PPT",
-                    id: "wumind.starter.ppt"
-                ) {
-                    openTool(.ppt)
-                }
-
-                minimalStarterPill(
-                    icon: "square.grid.2x2.fill",
-                    color: .purple,
-                    title: "前往工作台（生图 · 视频 · 3D · 标书）",
-                    id: "wumind.starter.workbench"
-                ) {
-                    withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
-                        selectedMainTab = .workbench
-                    }
-                }
             }
-            .frame(maxWidth: 420)
-
             Spacer(minLength: 24)
         }
+        .padding(.horizontal, 6)
         .frame(maxWidth: .infinity)
     }
 
-    private func minimalStarterPill(
-        icon: String,
-        color: Color,
-        title: String,
-        id: String,
-        action: @escaping () -> Void
-    ) -> some View {
+    private func welcomeSuggestion(_ title: String, icon: String, id: String, action: @escaping () -> Void) -> some View {
         Button {
             Haptics.tap()
             action()
         } label: {
-            HStack(spacing: 10) {
+            HStack(spacing: 12) {
                 Image(systemName: icon)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(color)
-                    .frame(width: 28, height: 28)
-                    .background(color.opacity(0.12), in: Circle())
+                    .foregroundStyle(.secondary)
                 Text(title)
-                    .font(.subheadline.weight(.medium))
                     .foregroundStyle(.primary)
-                    .lineLimit(1)
-                Spacer(minLength: 4)
-                Image(systemName: "arrow.up.right")
-                    .font(.system(size: 11.5, weight: .semibold))
-                    .foregroundStyle(.tertiary)
+                Spacer(minLength: 8)
+                Image(systemName: "arrow.up.left")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 11)
-            .background(elevatedSurface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(subtleBorder, lineWidth: 1))
+            .font(.subheadline)
+            .padding(.horizontal, 16)
+            .frame(minHeight: 52)
+            .background(elevatedSurface, in: RoundedRectangle(cornerRadius: 17))
         }
         .buttonStyle(.plain)
+        .frame(maxWidth: 350)
         .accessibilityIdentifier(id)
     }
 
@@ -1521,7 +1445,7 @@ struct WuMindWorkspaceView: View {
             return "针对已上传的 \(store.pendingAttachments.count) 个附件提问…"
         }
         if let proj = store.activeProject {
-            return "在项目「\(proj.name)」中提问（已共享指令与 \(proj.knowledgeDocs.count) 份资料）…"
+            return "向「\(proj.name)」提问…"
         }
         if let repo = store.attachedGitHubContext {
             return "结合 \(repo.repo.fullName) 提问，或输入消息…"
@@ -1529,7 +1453,7 @@ struct WuMindWorkspaceView: View {
         if let skill = store.activeSkill {
             return "以「\(skill.name)」模式向 WUMIND 提问…"
         }
-        return "向 WUMIND 提问，可开启智能体、上传文件或连接项目…"
+        return "发送消息"
     }
 
     private var compactComposerModelTitle: String {
@@ -2570,11 +2494,11 @@ private struct WuMindIsolatedComposerBar: View {
                     .strokeBorder(composerFocused.wrappedValue ? activeAccentColor.opacity(0.60) : subtleBorder,
                                   lineWidth: composerFocused.wrappedValue ? 1.6 : 1)
             )
-            .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.28 : 0.06), radius: 8, y: 3)
+
         }
         .padding(.horizontal, 14)
         .padding(.top, 6)
-        .padding(.bottom, 12)
+        .padding(.bottom, 8)
         .frame(maxWidth: 780)
         .frame(maxWidth: .infinity)
         .background(canvasBackground)

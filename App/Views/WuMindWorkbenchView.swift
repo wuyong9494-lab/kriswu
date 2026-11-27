@@ -19,6 +19,7 @@ struct WuMindWorkbenchView: View {
     let onOpenInChatConnectors: () -> Void
     let onOpenWallet: () -> Void
     let onOpenModelHub: () -> Void
+    let onOpenSettings: () -> Void
     let onSwitchToWorks: () -> Void
     let onStartDeepResearch: () -> Void
 
@@ -30,6 +31,12 @@ struct WuMindWorkbenchView: View {
         var id: String { rawValue }
     }
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var toolQuery = ""
+    @FocusState private var searchFocused: Bool
+    @State private var showPipelines = false
+    @State private var showQueue = false
+    @State private var showManagement = false
     @State private var statusFilter: TaskStatusFilter = .all
     @State private var selectedDetailWork: WuMindLocalWork? = nil
     @State private var refreshingWorkID: String? = nil
@@ -50,22 +57,34 @@ struct WuMindWorkbenchView: View {
     private var failedCount: Int { worksStore.works.filter(\.isFailed).count }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                headerRow
-                studiosGrid
-                multiStepPipelinesSection
-                taskQueueSection
-                workspaceToolsRow
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    headerRow
+                    studiosGrid
+                    if toolQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        expandableRow("继续编辑", icon: "clock.arrow.circlepath",
+                                      id: "wumind.workbench.continue", expanded: $showPipelines)
+                        if showPipelines { multiStepPipelinesSection }
+                        if !worksStore.works.isEmpty {
+                            expandableRow(activeCount > 0 ? "任务 · \(activeCount) 项进行中" : "任务记录",
+                                          icon: "tray", id: "wumind.workbench.queue", expanded: $showQueue)
+                            if showQueue { taskQueueSection }
+                        }
+                        expandableRow("空间与账户", icon: "slider.horizontal.3",
+                                      id: "wumind.workbench.manage", expanded: $showManagement)
+                        if showManagement { workspaceToolsRow }
+                    }
+                }
+                .padding(.horizontal, 18)
+                .padding(.top, 10)
+                .padding(.bottom, 16)
+                .frame(maxWidth: 660)
+                .frame(maxWidth: .infinity)
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
-            .padding(.bottom, 24)
-            .frame(maxWidth: 780)
-            .frame(maxWidth: .infinity)
-        }
-        .refreshable {
-            await worksStore.syncFromCloud()
+            .scrollDismissesKeyboard(.interactively)
+            .refreshable { await worksStore.syncFromCloud() }
+            searchBar
         }
         .sheet(item: $selectedDetailWork) { work in
             WuMindWorkDetailSheet(
@@ -100,123 +119,164 @@ struct WuMindWorkbenchView: View {
         .accessibilityIdentifier("wumind.workbench")
     }
 
-    // MARK: - Header + "+ 新建任务"
+    private struct StudioEntry: Identifiable {
+        let id: String
+        let title: String
+        let icon: String
+        let keywords: String
+        let action: () -> Void
+    }
+
+    private var studioEntries: [StudioEntry] {
+        [
+            .init(id: "wumind.quick.image", title: "生图", icon: "photo", keywords: "图片 绘画 image") { onOpenTool(.image) },
+            .init(id: "wumind.quick.video", title: "视频", icon: "video", keywords: "短剧 生成 剪辑 video") { onOpenTool(.video) },
+            .init(id: "wumind.quick.ppt", title: "PPT", icon: "rectangle.on.rectangle.angled", keywords: "幻灯片 演示 汇报") { onOpenTool(.ppt) },
+            .init(id: "wumind.quick.spatial3d", title: "3D 空间", icon: "cube", keywords: "建模 人物 建筑 CAD") { onOpenTool(.spatial3d) },
+            .init(id: "deepSeek.chat.tender", title: "标书", icon: "doc.text", keywords: "招投标 文档") { onOpenTool(.tender) },
+            .init(id: "wumind.quick.code", title: "编程", icon: "chevron.left.forwardslash.chevron.right", keywords: "代码 工程 code") { onOpenTool(.code) },
+            .init(id: "wumind.quick.research", title: "深度调研", icon: "globe", keywords: "搜索 核验 联网") { onStartDeepResearch() },
+            .init(id: "wumind.quick.plugins", title: "插件", icon: "puzzlepiece.extension", keywords: "连接器 GitHub") { onOpenInChatConnectors() },
+            .init(id: "ai.providers.open", title: "全部工坊", icon: "square.grid.2x2", keywords: "工具 智能体") { onOpenTool(.hub) },
+        ]
+    }
+
+    private var managementEntries: [StudioEntry] {
+        [
+            .init(id: "wumind.dock.projects", title: "项目空间", icon: "folder", keywords: "知识库 项目", action: onOpenProjects),
+            .init(id: "wumind.dock.schedules", title: "定时任务", icon: "clock", keywords: "提醒 日程", action: onOpenSchedules),
+            .init(id: "wumind.dock.models", title: "模型与密钥", icon: "cpu", keywords: "API Key", action: onOpenModelHub),
+            .init(id: "wumind.wallet.open", title: "钱包", icon: "wallet.bifold", keywords: "计费 充值 余额", action: onOpenWallet),
+            .init(id: "wumind.dock.skills", title: "技能", icon: "bolt", keywords: "智能体 自定义", action: onOpenSkills),
+            .init(id: "wumind.dock.works", title: "作品", icon: "tray", keywords: "历史 文件", action: onSwitchToWorks),
+        ]
+    }
 
     private var headerRow: some View {
-        HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("工作台")
-                    .font(.system(size: 20, weight: .bold, design: .rounded))
-                    .foregroundStyle(.primary)
-                Text("多步任务 · 后台跟踪 · 统一交付")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+        HStack {
+            Text("工作台")
+                .font(.title2.weight(.semibold))
+                .accessibilityAddTraits(.isHeader)
             Spacer()
-            Menu {
-                Button { onOpenTool(.ppt) } label: {
-                    Label("文档 / 表格 → AI 汇报 PPT", systemImage: "rectangle.on.rectangle.angled")
-                }
-                Button { onOpenTool(.image) } label: {
-                    Label("文字 / 参考图生图", systemImage: "photo.on.rectangle.angled")
-                }
-                Button { onOpenTool(.video) } label: {
-                    Label("AI 生视频 / 短剧分镜", systemImage: "video.badge.waveform.fill")
-                }
-                Button { onOpenTool(.spatial3d) } label: {
-                    Label("户型图 / 文字 → 3D 场景", systemImage: "cube.transparent")
-                }
-                Button { onOpenTool(.tender) } label: {
-                    Label("标书与专业长文档", systemImage: "doc.text.fill")
-                }
-                Button { onOpenTool(.code) } label: {
-                    Label("代码与工程助手", systemImage: "chevron.left.forwardslash.chevron.right")
-                }
-                Divider()
-                Button { onOpenTool(.agentOS) } label: {
-                    Label("多步智能体总控（Loops & Graphs）", systemImage: "cpu.fill")
-                }
-            } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 12.5, weight: .bold))
-                    Text("新建任务")
-                        .font(.subheadline.weight(.semibold))
-                }
-                .foregroundStyle(.white)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(Color.indigo, in: Capsule())
+            Button(action: onOpenSettings) {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 17, weight: .medium))
+                    .frame(width: 44, height: 44)
+                    .background(elevatedSurface, in: Circle())
             }
-            .accessibilityIdentifier("wumind.workbench.newTask")
+            .buttonStyle(.plain)
+            .accessibilityLabel("设置")
+            .accessibilityIdentifier("wumind.workbench.settings")
         }
     }
 
-    // MARK: - Studio Launchers (Clean 4x2 Compact Grid)
+    private var searchBar: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+            TextField("搜索工具", text: $toolQuery)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .focused($searchFocused)
+                .submitLabel(.search)
+                .onSubmit { searchFocused = false }
+                .accessibilityIdentifier("wumind.workbench.search")
+            if !toolQuery.isEmpty {
+                Button {
+                    toolQuery = ""
+                    searchFocused = false
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .frame(width: 44, height: 44)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("清除搜索")
+                .accessibilityIdentifier("wumind.workbench.clearSearch")
+            }
+        }
+        .padding(.leading, 15)
+        .padding(.trailing, 5)
+        .frame(minHeight: 48)
+        .background(elevatedSurface, in: Capsule())
+        .padding(.horizontal, 18)
+        .padding(.vertical, 8)
+        .frame(maxWidth: 660)
+        .frame(maxWidth: .infinity)
+    }
 
     private var studiosGrid: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 9), count: 4), spacing: 9) {
-            studioTile("生图", icon: "photo.on.rectangle.angled", color: .purple, id: "wumind.quick.image") {
-                onOpenTool(.image)
-            }
-            studioTile("生视频", icon: "video.badge.waveform.fill", color: .pink, id: "wumind.quick.video") {
-                onOpenTool(.video)
-            }
-            studioTile("写 PPT", icon: "rectangle.on.rectangle.angled", color: .orange, id: "wumind.quick.ppt") {
-                onOpenTool(.ppt)
-            }
-            studioTile("3D 空间", icon: "cube.transparent", color: .teal, id: "wumind.quick.spatial3d") {
-                onOpenTool(.spatial3d)
-            }
-            studioTile("写标书", icon: "doc.text.fill", color: .blue, id: "deepSeek.chat.tender") {
-                onOpenTool(.tender)
-            }
-            studioTile("深度调研", icon: "magnifyingglass.circle.fill", color: .indigo, id: "wumind.quick.research") {
-                onStartDeepResearch()
-            }
-            studioTile("插件连接", icon: "puzzlepiece.extension.fill", color: .mint, id: "wumind.quick.plugins") {
-                onOpenInChatConnectors()
-            }
-            studioTile("全部工坊", icon: "square.grid.2x2.fill", color: .secondary, id: "ai.providers.open") {
-                onOpenTool(.hub)
+        let query = toolQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        let matches = query.isEmpty ? studioEntries : (studioEntries + managementEntries).filter {
+            ($0.title + " " + $0.keywords).localizedCaseInsensitiveContains(query)
+        }
+        return Group {
+            if matches.isEmpty {
+                Text("没有匹配的工具")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 88)
+            } else {
+                studioGrid(matches)
             }
         }
     }
 
-    private func studioTile(_ title: String, icon: String, color: Color, id: String, action: @escaping () -> Void) -> some View {
-        Button {
-            Haptics.tap()
-            action()
-        } label: {
-            VStack(spacing: 6) {
-                Image(systemName: icon)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(color)
-                    .frame(width: 34, height: 34)
-                    .background(color.opacity(0.13), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-                Text(title)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+    private func studioGrid(_ entries: [StudioEntry]) -> some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10),
+                                count: dynamicTypeSize.isAccessibilitySize ? 1 : 2), spacing: 10) {
+            ForEach(entries) { entry in
+                Button {
+                    Haptics.tap()
+                    searchFocused = false
+                    entry.action()
+                } label: {
+                    VStack(alignment: .leading, spacing: 9) {
+                        Image(systemName: entry.icon)
+                            .font(.system(size: 17, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
+                        Text(entry.title)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.primary)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 45, alignment: .leading)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(elevatedSurface, in: RoundedRectangle(cornerRadius: 16))
+                    .contentShape(RoundedRectangle(cornerRadius: 16))
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier(entry.id)
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
-            .background(elevatedSurface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(subtleBorder, lineWidth: 1))
+        }
+    }
+
+    private func expandableRow(_ title: String, icon: String, id: String, expanded: Binding<Bool>) -> some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.18)) { expanded.wrappedValue.toggle() }
+        } label: {
+            HStack(spacing: 10) {
+                Label(title, systemImage: icon)
+                    .font(.subheadline.weight(.medium))
+                Spacer()
+                Image(systemName: expanded.wrappedValue ? "chevron.up" : "chevron.down")
+                    .font(.caption.weight(.semibold))
+                    .accessibilityHidden(true)
+            }
+            .padding(.horizontal, 13)
+            .frame(minHeight: 44)
+            .foregroundStyle(.secondary)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier(id)
+        .accessibilityValue(expanded.wrappedValue ? "已展开" : "已收起")
     }
 
     // MARK: - Live Multi-Step Workflows (Real State from PPT & 3D Studios)
 
     private var multiStepPipelinesSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("多步骤续作流水线")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(.secondary)
-
             // 1) PPT Multi-Step Pipeline
             Button {
                 Haptics.tap()
@@ -529,61 +589,6 @@ struct WuMindWorkbenchView: View {
     // MARK: - Workspace Management Shortcuts (Projects, Schedules, Skills, Wallet/Channel)
 
     private var workspaceToolsRow: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("空间与账户管理")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(.secondary)
-
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 8) {
-                compactManageTile("项目空间", icon: "folder.fill", color: .indigo, badge: store.projects.isEmpty ? nil : "\(store.projects.count)", id: "wumind.dock.projects") {
-                    onOpenProjects()
-                }
-                compactManageTile("定时任务", icon: "clock.arrow.circlepath", color: .orange, badge: store.scheduledTasks.filter(\.enabled).isEmpty ? nil : "\(store.scheduledTasks.filter(\.enabled).count)", id: "wumind.dock.schedules") {
-                    onOpenSchedules()
-                }
-                compactManageTile("模型 / Key", icon: "cpu.fill", color: store.selectedProvider.brandColor, badge: nil, id: "wumind.dock.models") {
-                    onOpenModelHub()
-                }
-                compactManageTile(store.channel == .managed ? "钱包计费" : "钱包通道", icon: "creditcard.fill", color: .indigo, badge: nil, id: "wumind.wallet.open") {
-                    onOpenWallet()
-                }
-            }
-        }
-    }
-
-    private func compactManageTile(_ title: String, icon: String, color: Color, badge: String?, id: String, action: @escaping () -> Void) -> some View {
-        Button {
-            Haptics.tap()
-            action()
-        } label: {
-            VStack(spacing: 5) {
-                ZStack(alignment: .topTrailing) {
-                    Image(systemName: icon)
-                        .font(.system(size: 14.5, weight: .semibold))
-                        .foregroundStyle(color)
-                        .frame(width: 30, height: 30)
-                        .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-                    if let badge {
-                        Text(badge)
-                            .font(.system(size: 9, weight: .bold, design: .rounded))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 1)
-                            .background(color, in: Capsule())
-                            .offset(x: 6, y: -4)
-                    }
-                }
-                Text(title)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 9)
-            .background(elevatedSurface, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).strokeBorder(subtleBorder, lineWidth: 1))
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier(id)
+        studioGrid(managementEntries)
     }
 }
