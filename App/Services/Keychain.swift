@@ -60,12 +60,12 @@ enum Keychain {
 
     static func wuMindGatewayUserToken(for gateway: String, accountID: String) -> String? {
         guard let raw = get(.wumindGatewayUserToken),
-              let session = try? JSONDecoder().decode(WuMindGatewaySession.self, from: Data(raw.utf8)) else { return nil }
+              let session = try? JSONDecoder().decode(WuMindGatewayCredential.self, from: Data(raw.utf8)) else { return nil }
         return session.token(for: gateway, accountID: accountID)
     }
 
     static func setWuMindGatewayUserToken(_ token: String, gateway: String, accountID: String) -> Bool {
-        guard let session = WuMindGatewaySession(gateway: gateway, accountID: accountID, token: token),
+        guard let session = WuMindGatewayCredential(gateway: gateway, accountID: accountID, token: token),
               let data = try? JSONEncoder().encode(session) else { return false }
         return setDeviceOnly(String(decoding: data, as: UTF8.self), for: .wumindGatewayUserToken)
     }

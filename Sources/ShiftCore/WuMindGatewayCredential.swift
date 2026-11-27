@@ -1,7 +1,7 @@
 import Foundation
 
 /// One device-only Keychain entry holds both the bearer and its issuing gateway and account.
-struct WuMindGatewaySession: Codable {
+struct WuMindGatewayCredential: Codable {
     private let gateway: String
     private let accountID: String
     private let token: String
