@@ -29,7 +29,7 @@ struct GamesHomeView: View {
                     showingArena = true
                 } label: {
                     HStack {
-                        row("勇者乱斗", "13 位英雄、11 种玩法；原地图与扩展地图可选，也能和同事联机", "flame.fill", 3)
+                        row("勇者乱斗", "多人竞技 · 13 位英雄", "flame.fill", 3)
                         Spacer()
                         Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
                     }
@@ -38,14 +38,15 @@ struct GamesHomeView: View {
                 .foregroundStyle(.primary)
                 .accessibilityIdentifier("arena.enter")
                 NavigationLink { TileGameHomeView() } label: {
-                    row("星了个星", "三消储能、移动叠层；主线航程、每日星约与策略试炼", "square.stack.3d.up.fill", 6)
+                    row("星了个星", "叠层三消 · 每日挑战", "square.stack.3d.up.fill", 6)
                 }
+                .accessibilityIdentifier("games.tiles")
                 Button {
                     ArenaOrientation.hold(duelOrientationID)
                     showingDuel = true
                 } label: {
                     HStack {
-                        row("裂隙对决", "四位原创武者，暗影格斗手感；自动防守、搓招连击与技能对决", "figure.boxing", 3)
+                        row("裂隙对决", "双人格斗 · 练习与联机", "figure.boxing", 3)
                         Spacer()
                         Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
                     }
@@ -53,8 +54,6 @@ struct GamesHomeView: View {
                 }
                 .foregroundStyle(.primary)
                 .accessibilityIdentifier("duel.enter")
-            } footer: {
-                Text("面对面：身边的手机直接连，不用联网。远程对战：用苹果的 Game Center，大家在手机「设置 › Game Center」登录自己的 Apple ID；对方手机上也要装着值班提醒，最好是同一个版本。")
             }
             #if L12_INTERNAL_PREVIEW
             Section("内部测试") {
@@ -92,12 +91,12 @@ struct GamesHomeView: View {
     private func row(_ title: String, _ note: String, _ icon: String, _ color: Int) -> some View {
         HStack(spacing: DS.Space.s) {
             IconBadge(icon: icon, color: DS.Palette.vivid[color], size: 36)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DS.Space.xxs) {
                 Text(title).font(DS.Font.headline)
                 Text(note).font(DS.Font.caption).foregroundStyle(.secondary)
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, DS.Space.xs)
     }
 }
 
@@ -120,6 +119,7 @@ struct GameRoomButtons: View {
     @State private var code = ""
     @State private var players = 2
     @EnvironmentObject private var store: AppStore
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         Section {
@@ -148,7 +148,8 @@ struct GameRoomButtons: View {
             if remotePlayers.count > 1 {
                 Stepper("\(players) 个人", value: $players, in: remotePlayers)
             }
-            HStack {
+            let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading)) : AnyLayout(HStackLayout())
+            layout {
                 TextField("房间号（4 位数）", text: $code)
                     .keyboardType(.numberPad)
                 Button("随机一个") { code = String(RoomCode.make(players: players)) }
@@ -183,7 +184,7 @@ struct GameRoomLobby<Ready: View>: View {
         }
         switch room.phase {
         case .idle:
-            Section { ProgressView() }
+            Section { ProgressView("正在打开房间…") }
         case .waiting:
             waiting
         case .browsing, .joining:

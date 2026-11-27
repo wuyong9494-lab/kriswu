@@ -4,7 +4,7 @@ import UIKit
 // MARK: - 设计系统（Design System）
 //
 // 全 App 只从这里取颜色、间距、圆角、字体、阴影，页面里不写死数值。
-// 间距走 8pt 网格；表面用毛玻璃 + 极细描边（Glassmorphism），浅色模式下卡片顶边带一道高光（少量 Neumorphism）。
+// 系统语义字号配合自适应表面和 8pt 间距。
 
 enum DS {
     /// iPad 上内容最宽多少（iPhone 上用不到这么宽）
@@ -38,14 +38,9 @@ enum DS {
         static let danger = Color(light: 0xE5484D, dark: 0xFF6369)
         static let info = Color(light: 0x0E9AA7, dark: 0x3DD1DB)
 
-        /// 页面背景：不是一整块纯色，上浅下深，再叠两团很淡的光
-        static let background = Color(light: 0xF4F5F8, dark: 0x0B0B0F)
-        static let backgroundBottom = Color(light: 0xEEF0F5, dark: 0x111218)
-        static let backgroundGlowA = Color(light: 0x5B8DEF, dark: 0x3F7BFF, opacity: 0.10)
-        static let backgroundGlowB = Color(light: 0x8E7CF0, dark: 0xA25CFF, opacity: 0.08)
-        /// 卡片表面（预混合不透明底色，彻底避免滚动中逐卡毛玻璃离屏渲染掉帧）
-        static let cardSurface = Color(light: 0xFFFFFF, dark: 0x191C2A)
-        static let surface = Color(light: 0xFFFFFF, dark: 0x1A1D2B, opacity: 0.94)
+        static let background = Color(light: 0xF3F4F2, dark: 0x111413)
+        static let cardSurface = Color(light: 0xFFFFFF, dark: 0x1E2220)
+        static let surface = cardSurface
         static let surfaceSunken = Color(light: 0x000000, dark: 0xFFFFFF, opacity: 0.05)
         /// 图标方块：玻璃感的单色底
         static let glass = Color(light: 0x000000, dark: 0xFFFFFF, opacity: 0.06)
@@ -87,20 +82,17 @@ enum DS {
         }
     }
 
-    /// 字体层级（全部圆体）
     enum Font {
-        // 用系统文字样式：默认大小和以前一样，用户在「设置 › 显示 › 文字大小」调大时跟着变大
-        static let display = SwiftUI.Font.system(.largeTitle, design: .rounded).weight(.bold)
-        // 首页的大字本来就很大，不跟着放大（放大会挤出屏幕）
-        static let hero = SwiftUI.Font.system(size: 56, weight: .heavy, design: .rounded)
-        static let giant = SwiftUI.Font.system(size: 72, weight: .heavy, design: .rounded)
-        static let title = SwiftUI.Font.system(.title2, design: .rounded).weight(.semibold)
-        static let headline = SwiftUI.Font.system(.headline, design: .rounded).weight(.semibold)
-        static let body = SwiftUI.Font.system(.subheadline, design: .rounded)
-        static let callout = SwiftUI.Font.system(.subheadline, design: .rounded).weight(.medium)
-        static let caption = SwiftUI.Font.system(.caption, design: .rounded).weight(.medium)
-        static let overline = SwiftUI.Font.system(.caption2, design: .rounded).weight(.semibold)
-        static let number = SwiftUI.Font.system(.title, design: .rounded).weight(.bold).monospacedDigit()
+        static let display = SwiftUI.Font.largeTitle.bold()
+        static let hero = SwiftUI.Font.largeTitle.weight(.heavy)
+        static let giant = SwiftUI.Font.largeTitle.weight(.black)
+        static let title = SwiftUI.Font.title2.weight(.semibold)
+        static let headline = SwiftUI.Font.headline
+        static let body = SwiftUI.Font.body
+        static let callout = SwiftUI.Font.callout.weight(.medium)
+        static let caption = SwiftUI.Font.footnote
+        static let overline = SwiftUI.Font.caption.weight(.semibold)
+        static let number = SwiftUI.Font.title.bold().monospacedDigit()
     }
 
     enum Motion {
@@ -154,18 +146,9 @@ extension Color {
 
 // MARK: - 背景
 
-/// 全 App 统一背景：底色 + 两团很淡的光（通过 Metal 离屏缓存为单张静态纹理，滚动零重绘）
 struct AppBackground: View {
     var body: some View {
-        ZStack {
-            LinearGradient(colors: [DS.Palette.background, DS.Palette.backgroundBottom], startPoint: .top, endPoint: .bottom)
-            RadialGradient(colors: [DS.Palette.backgroundGlowA, .clear], center: UnitPoint(x: 0.15, y: 0.0),
-                           startRadius: 0, endRadius: 460)
-            RadialGradient(colors: [DS.Palette.backgroundGlowB, .clear], center: UnitPoint(x: 0.9, y: 0.35),
-                           startRadius: 0, endRadius: 360)
-        }
-        .drawingGroup(opaque: true)
-        .ignoresSafeArea()
+        DS.Palette.background.ignoresSafeArea()
     }
 }
 
@@ -192,32 +175,17 @@ extension View {
 
 // MARK: - 卡片
 
-/// 高帧率旗舰卡片：预混合实心卡片底面 + 1pt 极细描边 + 轻量化解析阴影，彻底消除滚动时多卡毛玻璃掉帧
 struct CardModifier: ViewModifier {
     var tint: Color?
     var padding: CGFloat = DS.Space.m
-    @Environment(\.colorScheme) private var scheme
 
     func body(content: Content) -> some View {
-        let shape = RoundedRectangle(cornerRadius: DS.Radius.xl, style: .continuous)
-        let baseFill: Color = {
-            guard let tint else { return DS.Palette.cardSurface }
-            return DS.Palette.cardSurface.blended(with: tint, scheme == .dark ? 0.14 : 0.06)
-        }()
-        let borderColor: Color = {
-            if let tint { return tint.opacity(scheme == .dark ? 0.30 : 0.22) }
-            return scheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.06)
-        }()
-
+        let surface = RoundedRectangle(cornerRadius: DS.Radius.l, style: .continuous)
         content
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background {
-                shape
-                    .fill(baseFill)
-                    .shadow(color: Color.black.opacity(scheme == .dark ? 0.22 : 0.05), radius: 6, x: 0, y: 2)
-            }
-            .overlay(shape.strokeBorder(borderColor, lineWidth: 0.75))
+            .background(DS.Palette.cardSurface, in: surface)
+            .overlay(surface.strokeBorder(tint?.opacity(0.34) ?? DS.Palette.hairline))
     }
 }
 
@@ -426,13 +394,12 @@ private struct DSButtonBody: View {
             .padding(.horizontal, DS.Space.m)
             .padding(.vertical, DS.Space.s)
             .frame(maxWidth: fullWidth ? .infinity : nil)
+            .frame(minHeight: 44)
             .foregroundStyle(foreground)
             .background {
                 switch kind {
                 case .primary:
-                    shape.fill(LinearGradient(colors: [DS.Palette.accent.opacity(0.88), DS.Palette.accent],
-                                              startPoint: .top, endPoint: .bottom))
-                        .shadow(color: DS.Palette.accent.opacity(0.3), radius: configuration.isPressed ? 4 : 10, y: 4)
+                    shape.fill(DS.Palette.accent)
                 case .destructive:
                     shape.fill(DS.Palette.danger)
                 case .secondary:
@@ -441,7 +408,6 @@ private struct DSButtonBody: View {
                     shape.fill(configuration.isPressed ? DS.Palette.accentSoft : Color.clear)
                 }
             }
-            .scaleEffect(configuration.isPressed ? 0.97 : 1)
             .brightness(configuration.isPressed ? -0.04 : 0)
             .opacity(isEnabled ? 1 : 0.45)
             .animation(DS.Motion.snappy, value: configuration.isPressed)
@@ -475,12 +441,13 @@ struct PressableStyle: ButtonStyle {
 
 // MARK: - 输入框
 
-/// 圆角输入框：浅底、无边框
+/// 表单输入框，随正文字号增长。
 struct DSFieldStyle: TextFieldStyle {
     func _body(configuration: TextField<Self._Label>) -> some View {
         configuration
             .font(DS.Font.body)
             .padding(DS.Space.s)
+            .frame(minHeight: 44)
             .background(DS.Palette.surfaceSunken, in: RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
     }
 }
@@ -593,23 +560,13 @@ enum Haptics {
 // MARK: - 导航栏、标签栏外观
 
 enum ChromeAppearance {
-    /// 导航栏、标签栏：毛玻璃、圆体标题、没有分隔线（App 启动时在主线程设一次）
     @MainActor
     static func apply() {
-        func rounded(_ size: CGFloat, _ weight: UIFont.Weight) -> UIFont {
-            let base = UIFont.systemFont(ofSize: size, weight: weight)
-            return base.fontDescriptor.withDesign(.rounded).map { UIFont(descriptor: $0, size: size) } ?? base
-        }
         let nav = UINavigationBarAppearance()
         nav.configureWithDefaultBackground()
         nav.backgroundEffect = UIBlurEffect(style: .systemChromeMaterial)
-        nav.shadowColor = .clear
-        nav.largeTitleTextAttributes = [.font: rounded(32, .bold)]
-        nav.titleTextAttributes = [.font: rounded(17, .semibold)]
         let edge = UINavigationBarAppearance()
         edge.configureWithTransparentBackground()
-        edge.largeTitleTextAttributes = nav.largeTitleTextAttributes
-        edge.titleTextAttributes = nav.titleTextAttributes
         UINavigationBar.appearance().standardAppearance = nav
         UINavigationBar.appearance().compactAppearance = nav
         UINavigationBar.appearance().scrollEdgeAppearance = edge
@@ -618,12 +575,6 @@ enum ChromeAppearance {
         tab.configureWithDefaultBackground()
         tab.backgroundEffect = UIBlurEffect(style: .systemChromeMaterial)
         tab.shadowColor = .clear
-        let item = UITabBarItemAppearance()
-        item.normal.titleTextAttributes = [.font: rounded(10, .medium)]
-        item.selected.titleTextAttributes = [.font: rounded(10, .semibold)]
-        tab.stackedLayoutAppearance = item
-        tab.inlineLayoutAppearance = item
-        tab.compactInlineLayoutAppearance = item
         UITabBar.appearance().standardAppearance = tab
         UITabBar.appearance().scrollEdgeAppearance = tab
     }
@@ -796,7 +747,6 @@ struct SkeletonRows: View {
 
 // MARK: - 悬浮标签栏
 
-/// 悬浮在页面底部的玻璃胶囊，选中项后面有一颗会滑动的药丸
 struct FloatingTabBar<Tab: Hashable>: View {
     struct Item {
         let tab: Tab
@@ -806,61 +756,44 @@ struct FloatingTabBar<Tab: Hashable>: View {
 
     let items: [Item]
     @Binding var selection: Tab
-    @Namespace private var pill
+    @Environment(\.dynamicTypeSize) private var textSize
 
     var body: some View {
-        VStack(spacing: 0) {
-            Rectangle()
-                .fill(DS.Palette.hairline)
-                .frame(height: 0.6)
-
-            HStack(spacing: 2) {
-                ForEach(items, id: \.tab) { item in
-                    let selected = item.tab == selection
-                    Button {
-                        guard !selected else { return }
+        let count = textSize.isAccessibilitySize ? min(items.count, 3) : items.count
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: count), spacing: 0) {
+            ForEach(items, id: \.tab) { item in
+                let selected = item.tab == selection
+                Button {
+                    if !selected {
                         Haptics.select()
-                        withAnimation(.spring(response: 0.36, dampingFraction: 0.80)) { selection = item.tab }
-                    } label: {
-                        VStack(spacing: 3) {
-                            Image(systemName: item.icon)
-                                .font(.system(size: 18, weight: selected ? .semibold : .regular))
-                                .symbolRenderingMode(.hierarchical)
-                                .scaleEffect(selected ? 1.05 : 1)
-                            Text(item.title)
-                                .font(.system(size: 10, weight: selected ? .semibold : .medium, design: .rounded))
-                                .lineLimit(1)
-                        }
-                        .foregroundStyle(selected ? DS.Palette.accent : DS.Palette.iconSecondary)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 46)
-                        .background {
-                            if selected {
-                                RoundedRectangle(cornerRadius: 13, style: .continuous)
-                                    .fill(DS.Palette.accent.opacity(0.14))
-                                    .matchedGeometryEffect(id: "pill", in: pill)
-                            }
-                        }
+                        selection = item.tab
                     }
-                    .buttonStyle(PressableStyle())
-                    .accessibilityAddTraits(selected ? .isSelected : [])
-                    .accessibilityIdentifier("app.tab.\(item.title)")
+                } label: {
+                    VStack(spacing: 2) {
+                        Image(systemName: item.icon)
+                            .font(.headline)
+                            .accessibilityHidden(true)
+                        Text(item.title)
+                            .font(.caption2.weight(selected ? .bold : .regular))
+                            .multilineTextAlignment(.center)
+                    }
+                    .foregroundStyle(selected ? DS.Palette.accent : .secondary)
+                    .padding(.vertical, DS.Space.xxs)
+                    .frame(maxWidth: .infinity, minHeight: 46)
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(selected ? .isSelected : [])
+                .accessibilityIdentifier("app.tab.\(item.title)")
             }
-            .frame(maxWidth: 640)
-            .padding(.horizontal, 8)
-            .padding(.top, 4)
-            .padding(.bottom, 0)
-            .frame(maxWidth: .infinity)
         }
-        .background {
-            Rectangle()
-                .fill(Color(light: 0xFFFFFF, dark: 0x12141E, opacity: 0.98))
-                .ignoresSafeArea(edges: .bottom)
-        }
-        // 告诉页面标签栏的上边在哪（网页和列表底部留白以它为准）
-        .background(GeometryReader { g in
-            Color.clear.preference(key: TabBarTopKey.self, value: g.frame(in: .global).minY)
+        .padding(.horizontal, DS.Space.xs)
+        .frame(maxWidth: DS.readableWidth)
+        .frame(maxWidth: .infinity)
+        .background(DS.Palette.cardSurface.ignoresSafeArea(edges: .bottom))
+        .overlay(alignment: .top) { Divider() }
+        .background(GeometryReader { geo in
+            Color.clear.preference(key: TabBarTopKey.self, value: geo.frame(in: .global).minY)
         })
     }
 }

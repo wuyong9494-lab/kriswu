@@ -17,9 +17,9 @@ struct ArenaMenuScreen<Content: View>: View {
             ArenaMenuTheme.canvas.ignoresSafeArea()
             VStack(spacing: 12) {
                 HStack {
-                    ArenaInterfaceIcon(title.contains("设置") ? .settings : .home)
-                        .frame(width: 23, height: 23).foregroundStyle(ArenaMenuTheme.accent)
-                    Text(title).font(.system(size: 23, weight: .bold, design: .rounded))
+                    Text(title)
+                        .font(DS.Font.title)
+                        .accessibilityAddTraits(.isHeader)
                     Spacer()
                     Button { ArenaSound.shared.menu(.uiBack); onClose() } label: {
                         ArenaVendorIcon(name: "cross").frame(width: 20, height: 20).frame(width: 44, height: 44)
@@ -31,7 +31,7 @@ struct ArenaMenuScreen<Content: View>: View {
                 } else {
                     content.frame(maxWidth: 720).frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-            }.padding(16)
+            }.padding(DS.Space.m)
         }
         .foregroundStyle(.white)
         .modifier(ArenaLandscape())
@@ -57,7 +57,8 @@ struct ArenaMenuCard<Content: View>: View {
 struct ArenaMenuButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 14, weight: .semibold, design: .rounded))
+            .frame(minHeight: 44)
+            .font(DS.Font.callout)
             .foregroundStyle(.white)
             .background {
                 ArenaVendorButtonFace(pressed: configuration.isPressed)
@@ -78,7 +79,7 @@ struct ArenaMenuToggle: View {
     var body: some View {
         Button { isOn.toggle(); ArenaSound.shared.menu(.uiToggle) } label: {
             HStack {
-                Text(title).font(.system(size: 15, weight: .semibold, design: .rounded))
+                Text(title).font(DS.Font.callout)
                 Spacer()
                 HStack(spacing: 6) {
                     Text(isOn ? "开" : "关").font(.caption.bold())
@@ -97,7 +98,7 @@ struct ArenaMenuSlider: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack { Text(title); Spacer(); Text("\(Int(value * 100))%").monospacedDigit() }
-                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .font(DS.Font.callout)
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     ArenaInterfaceTexture(role: .sliderTrack, cap: 10).frame(height: 10)
@@ -138,7 +139,7 @@ struct ArenaAudioSettingsView: View {
                 ArenaInterfaceIcon(musicMuted ? .musicOff : .musicOn).frame(width: 24, height: 24)
             }
             ArenaMenuToggle(title: "原创主题音乐", isOn: $themeAudio)
-            Text("默认使用完整原创配乐，覆盖大厅、战斗和胜负结算；关闭后使用原有配乐与结算短音。")
+            Text("关闭后使用原有配乐及结算音。")
                 .font(.caption).foregroundStyle(.white.opacity(0.7))
                 .fixedSize(horizontal: false, vertical: true)
             ArenaMenuToggle(title: "音乐静音", isOn: $musicMuted)
@@ -150,7 +151,7 @@ struct ArenaAudioSettingsView: View {
             }.buttonStyle(ArenaMenuButtonStyle())
             HStack(alignment: .top, spacing: 8) {
                 ArenaInterfaceIcon(.information).frame(width: 16, height: 16)
-                Text("总静音仍由大厅扬声器按钮控制。耳机拔出后不会自动改用扬声器；确认后可在这里恢复。其他 App 播放音乐时，本游戏背景音乐让出。")
+                Text("拔下耳机后可手动恢复播放。大厅的扬声器按钮控制总静音。")
                     .fixedSize(horizontal: false, vertical: true)
             }.font(.caption).foregroundStyle(.white.opacity(0.65))
         }

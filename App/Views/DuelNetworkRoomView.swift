@@ -6,6 +6,7 @@ struct DuelNetworkEntryView: View {
     var usesShadowArena: Bool = false
     var initialHero: DuelGame.Hero = .wuYong
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var textSize
     @EnvironmentObject private var store: AppStore
     @State private var nickname = GameProfile.nickname
     @State private var code = ""
@@ -14,19 +15,25 @@ struct DuelNetworkEntryView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .top, spacing: 20) {
-                        nearby.frame(width: 310)
-                        remote.frame(width: 310)
+                Group {
+                    if textSize.isAccessibilitySize {
+                        VStack(spacing: DS.Space.m) { nearby; remote }
+                    } else {
+                        ViewThatFits(in: .horizontal) {
+                            HStack(alignment: .top, spacing: DS.Space.m) {
+                                nearby.frame(width: 310)
+                                remote.frame(width: 310)
+                            }
+                            VStack(spacing: DS.Space.m) { nearby; remote }
+                        }
                     }
-                    VStack(spacing: 20) { nearby; remote }
                 }
                 .padding(20)
                 Text("本局可选：" + heroes.map(\.name).joined(separator: "、"))
                     .font(.callout).accessibilityIdentifier("duel.network.selectedPair")
                 Text(usesShadowArena
-                     ? "支持四位武者（吴庸、刘泉纬、徐骁、孙登）面对面 Wi-Fi/蓝牙 或 Game Center 4 位房间号 1v1 联机，房主权威 60Hz 同步。"
-                     : "面对面与远程均可进入双人格斗测试：先校验本机完整资源，再连接、选角并确认双方画面与操作界面就绪。")
+                     ? "面对面连接附近玩家，远程使用 Game Center 房间号。"
+                     : "连接前将校验本机资源，双方选角并就绪后开始。")
                     .font(.callout).foregroundStyle(.white.opacity(0.8))
                     .padding([.horizontal, .bottom], 20)
                     .accessibilityIdentifier("duel.network.scope")
@@ -171,12 +178,13 @@ private struct DuelNetworkLobbyContent: View {
     @ObservedObject var model: DuelNetworkSelectionModel
     @ObservedObject var owner: DuelNetworkRoomModel
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var textSize
 
     var body: some View {
         GeometryReader { geometry in
             VStack(spacing: 12) {
                 header
-                if geometry.size.width > geometry.size.height {
+                if geometry.size.width > geometry.size.height && !textSize.isAccessibilitySize {
                     HStack(alignment: .top, spacing: 16) {
                         showcase.frame(maxWidth: .infinity, maxHeight: .infinity)
                         ScrollView { controls }.frame(width: min(350, geometry.size.width * 0.43))
@@ -210,7 +218,6 @@ private struct DuelNetworkLobbyContent: View {
                     .font(.caption).foregroundStyle(.white.opacity(0.65))
             }
             Spacer()
-            Text("联机测试").font(.caption.bold()).foregroundStyle(.orange)
         }
     }
 

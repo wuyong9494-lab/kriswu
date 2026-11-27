@@ -2015,22 +2015,20 @@ struct ArenaGamePanel<Content: View>: View {
             ArenaLobbyBackground()
             VStack(spacing: 8) {
                 HStack(spacing: 10) {
-                    RoundedRectangle(cornerRadius: 4, style: .continuous)
-                        .fill(tint)
-                        .frame(width: 8, height: 28)
-                        .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(.black.opacity(0.6), lineWidth: 1.5))
                     Text(title)
-                        .font(.system(size: 28, weight: .black, design: .rounded))
+                        .font(DS.Font.title)
                         .foregroundStyle(.white)
-                        .arenaOutline(2)
+                        .padding(.horizontal, DS.Space.xs)
+                        .background(.black.opacity(0.45), in: RoundedRectangle(cornerRadius: DS.Radius.s))
+                        .accessibilityAddTraits(.isHeader)
                     Spacer()
                     Button(action: onClose) {
                         Image(systemName: "xmark")
                             .font(.system(size: 18, weight: .black))
                             .foregroundStyle(.white)
                             .frame(width: 44, height: 44)
-                            .background(Circle().fill(Color(red: 0.85, green: 0.22, blue: 0.22)))
-                            .overlay(Circle().strokeBorder(.black.opacity(0.75), lineWidth: 2))
+                            .background(Circle().fill(.black.opacity(0.65)))
+                            .overlay(Circle().strokeBorder(tint.opacity(0.7)))
                     }
                     .accessibilityLabel("关上")
                 }

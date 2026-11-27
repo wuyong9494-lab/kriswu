@@ -14,9 +14,8 @@ import UIKit
 final class AppTabBarVisibility: ObservableObject {
     static let shared = AppTabBarVisibility()
 
-    @Published private(set) var activeTabKey: String = "today"
     @Published private(set) var pushedTabs: Set<String> = []
-    @Published private(set) var explicitHideCount: Int = 0
+    @Published private var hiddenPresentations: [UUID: String] = [:]
     @Published private(set) var isKeyboardVisible: Bool = false
 
     private var cancellables: Set<AnyCancellable> = []
@@ -37,14 +36,8 @@ final class AppTabBarVisibility: ObservableObject {
             .store(in: &cancellables)
     }
 
-    var shouldHideTabBar: Bool {
-        isKeyboardVisible || explicitHideCount > 0 || pushedTabs.contains(activeTabKey)
-    }
-
-    func setActiveTab(_ tabKey: String) {
-        if activeTabKey != tabKey {
-            activeTabKey = tabKey
-        }
+    func shouldHideTabBar(for tabKey: String) -> Bool {
+        isKeyboardVisible || pushedTabs.contains(tabKey) || hiddenPresentations.values.contains(tabKey)
     }
 
     func setTabPushed(_ pushed: Bool, for tabKey: String) {
@@ -59,12 +52,21 @@ final class AppTabBarVisibility: ObservableObject {
         }
     }
 
-    func pushExplicitHide() {
-        explicitHideCount += 1
+    func setPresentation(_ id: UUID, tabKey: String?) {
+        if hiddenPresentations[id] != tabKey {
+            hiddenPresentations[id] = tabKey
+        }
     }
+}
 
-    func popExplicitHide() {
-        explicitHideCount = max(0, explicitHideCount - 1)
+private struct TabScopeKey: EnvironmentKey {
+    static let defaultValue: String? = nil
+}
+
+extension EnvironmentValues {
+    var floatingTabScope: String? {
+        get { self[TabScopeKey.self] }
+        set { self[TabScopeKey.self] = newValue }
     }
 }
 
@@ -116,28 +118,24 @@ private struct TabRootNavigationDepthSpy: UIViewControllerRepresentable {
         }
 
         func syncDepth() {
-            let count = navigationController?.viewControllers.count ?? 1
-            AppTabBarVisibility.shared.setTabPushed(count > 1, for: tabKey)
+            // Read the stack after UIKit has installed (or removed) the destination.
+            DispatchQueue.main.async { [weak self] in
+                guard let self, let stack = self.navigationController else { return }
+                AppTabBarVisibility.shared.setTabPushed(stack.viewControllers.count > 1, for: self.tabKey)
+            }
         }
     }
 }
 
 private struct ExplicitHideTabBarModifier: ViewModifier {
-    @State private var active = false
+    @Environment(\.floatingTabScope) private var tab
+    @State private var id = UUID()
 
     func body(content: Content) -> some View {
         content
             .toolbar(.hidden, for: .tabBar)
-            .onAppear {
-                guard !active else { return }
-                active = true
-                AppTabBarVisibility.shared.pushExplicitHide()
-            }
-            .onDisappear {
-                guard active else { return }
-                active = false
-                AppTabBarVisibility.shared.popExplicitHide()
-            }
+            .onAppear { AppTabBarVisibility.shared.setPresentation(id, tabKey: tab) }
+            .onDisappear { AppTabBarVisibility.shared.setPresentation(id, tabKey: nil) }
     }
 }
 
@@ -180,33 +178,16 @@ struct AppSectionCard<Content: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if title != nil || subtitle != nil {
-                VStack(alignment: .leading, spacing: 2) {
-                    if let title, !title.isEmpty {
-                        Text(title)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.primary)
-                    }
-                    if let subtitle, !subtitle.isEmpty {
-                        Text(subtitle)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
+        VStack(alignment: .leading, spacing: DS.Space.s) {
+            if let title, !title.isEmpty {
+                Text(title).font(DS.Font.headline).accessibilityAddTraits(.isHeader)
+            }
+            if let subtitle, !subtitle.isEmpty {
+                Text(subtitle).font(DS.Font.caption).foregroundStyle(.secondary)
             }
             content()
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color(.secondarySystemGroupedBackground))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder((tint ?? Color.primary).opacity(tint == nil ? 0.08 : 0.24), lineWidth: 0.9)
-        )
+        .card(tint: tint)
     }
 }
 
@@ -235,14 +216,14 @@ struct AppPrimaryCTA: View {
                         .font(.subheadline.weight(.semibold))
                 }
                 Text(title)
-                    .font(.subheadline.weight(.semibold))
+                    .font(DS.Font.headline)
             }
             .foregroundStyle(.white)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
+            .padding(.vertical, DS.Space.xs)
+            .frame(maxWidth: .infinity, minHeight: 44)
             .background(
                 (isDisabled || isLoading ? tint.opacity(0.42) : tint),
-                in: RoundedRectangle(cornerRadius: 13, style: .continuous)
+                in: RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous)
             )
         }
         .buttonStyle(.plain)
@@ -285,6 +266,7 @@ struct AppSaveToolbarButton: View {
                     .font(.body.weight(.semibold))
             }
         }
+        .accessibilityLabel(title)
         .disabled(isSaving || isDisabled)
         .accessibilityIdentifier(accessibilityID)
     }
@@ -299,32 +281,26 @@ struct AppEmptyStateCard: View {
     var action: (() -> Void)? = nil
 
     var body: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: DS.Space.s) {
             Image(systemName: icon)
-                .font(.system(size: 32, weight: .medium))
+                .font(.title)
                 .foregroundStyle(.secondary)
-            Text(title)
-                .font(.headline)
-                .foregroundStyle(.primary)
-            Text(message)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityHidden(true)
+            Text(title).font(DS.Font.headline)
+            if !message.isEmpty {
+                Text(message)
+                    .font(DS.Font.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if let actionTitle, let action {
                 Button(actionTitle, action: action)
-                    .font(.subheadline.weight(.semibold))
-                    .buttonStyle(.borderedProminent)
-                    .padding(.top, 4)
+                    .buttonStyle(.secondary)
             }
         }
-        .padding(.vertical, 24)
-        .padding(.horizontal, 18)
+        .multilineTextAlignment(.center)
         .frame(maxWidth: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color(.secondarySystemGroupedBackground))
-        )
+        .card(padding: DS.Space.l)
     }
 }
 

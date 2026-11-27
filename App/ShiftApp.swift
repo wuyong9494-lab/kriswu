@@ -341,12 +341,7 @@ struct RootView: View {
         // 换主题色时整个界面重画一遍
         .id(store.settings.accentTheme)
         .tint(DS.Palette.accent)
-        .fontDesign(.rounded)
-        .preferredColorScheme(
-            (customCatalogScreen == nil && activeWorkspace == .home)
-                ? .dark
-                : store.settings.appearance.colorScheme
-        )
+        .preferredColorScheme(store.settings.appearance.colorScheme)
         .overlay { ToastOverlay() }
         // 点了「先看演示」：仅在进入工作区后提示（绝不叠加在纯净双卡工作区首页上）
         .overlay(alignment: .top) {
@@ -518,7 +513,7 @@ struct RootView: View {
             page(.settings) { SettingsView() }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if !tabBarVisibility.shouldHideTabBar {
+            if !tabBarVisibility.shouldHideTabBar(for: tab.rawValue) {
                 FloatingTabBar(items: tabs, selection: $tab)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
@@ -528,12 +523,10 @@ struct RootView: View {
                 tabBarTop = value
             }
         }
-        .environment(\.floatingTabBarTop, tabBarVisibility.shouldHideTabBar ? .infinity : tabBarTop)
+        .environment(\.floatingTabBarTop, tabBarVisibility.shouldHideTabBar(for: tab.rawValue) ? .infinity : tabBarTop)
         .onAppear {
-            tabBarVisibility.setActiveTab(tab.rawValue)
             ScreenCatalog.scrollIfAsked()
         }
-        .onChange(of: tab) { tabBarVisibility.setActiveTab($0.rawValue) }
     }
 
     /// WuMind 工作区（外部账号严格保留三标签权限界限；内部账号直达全屏 WuMind；均带左上角返回首页）
@@ -546,15 +539,13 @@ struct RootView: View {
                 externalPage(.profile) { ExternalAccountProfileView() }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                if !tabBarVisibility.shouldHideTabBar {
+                if !tabBarVisibility.shouldHideTabBar(for: "ext.\(externalTab.rawValue)") {
                     FloatingTabBar(items: externalTabs, selection: $externalTab)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
             .onPreferenceChange(TabBarTopKey.self) { tabBarTop = $0 }
-            .environment(\.floatingTabBarTop, tabBarVisibility.shouldHideTabBar ? .infinity : tabBarTop)
-            .onAppear { tabBarVisibility.setActiveTab("ext.\(externalTab.rawValue)") }
-            .onChange(of: externalTab) { tabBarVisibility.setActiveTab("ext.\($0.rawValue)") }
+            .environment(\.floatingTabBarTop, tabBarVisibility.shouldHideTabBar(for: "ext.\(externalTab.rawValue)") ? .infinity : tabBarTop)
         } else {
             WuMindWorkspaceView(
                 onClose: nil,
@@ -591,6 +582,7 @@ struct RootView: View {
         let selected = tab == t
         if selected || visited.contains(t) {
             pageBody(selected, content: content)
+                .environment(\.floatingTabScope, t.rawValue)
                 .onAppear { visited.insert(t) }
         }
     }
@@ -600,6 +592,7 @@ struct RootView: View {
         let selected = externalTab == t
         if selected || visitedExternal.contains(t) {
             content()
+                .environment(\.floatingTabScope, "ext.\(t.rawValue)")
                 .opacity(selected ? 1 : 0)
                 .zIndex(selected ? 1 : 0)
                 .allowsHitTesting(selected)

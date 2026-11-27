@@ -13,6 +13,11 @@ on:
       - 'Tests/ArenaFlowTests/DeepSeekChatNavigationTests.swift'
       - '.github/workflows/wumind-layout-check.yml'
   workflow_dispatch:
+    inputs:
+      suites:
+        description: JSON array of simulator suites
+        required: false
+        default: '["chat","navigation","tools","games"]'
 
 permissions:
   contents: read
@@ -23,12 +28,15 @@ concurrency:
 
 jobs:
   layout:
+    name: ${{ matrix.device }} / ${{ matrix.suite }}
     runs-on: macos-26
     strategy:
       fail-fast: false
       matrix:
         device: ${{ fromJSON(github.event_name == 'workflow_dispatch' && '["iPhone","iPad"]' || '["iPhone"]') }}
+        suite: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.suites || '["chat"]') }}
     env:
+      SUITE: ${{ matrix.suite }}
       DEVICE_FAMILY: ${{ matrix.device }}
     timeout-minutes: 60
     steps:
@@ -54,21 +62,51 @@ jobs:
           print(items[-1][2])')
           xcrun simctl boot "$DEVICE" || true
           xcrun simctl bootstatus "$DEVICE" -b
-          xcrun simctl ui "$DEVICE" appearance dark
-          xcodebuild test -project ShiftReminder.xcodeproj -scheme ShiftReminder \
-            -destination "id=$DEVICE" -parallel-testing-enabled NO \
-            -only-testing:SiteTests/WuMindFlagshipAcceptanceTests \
-            -resultBundlePath wumind-acceptance.xcresult CODE_SIGNING_ALLOWED=NO \
-            | tee wumind-acceptance.log | tail -n 80
+          defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool NO
+          if [[ "$DEVICE_FAMILY" == "iPhone" ]]; then appearance=light; else appearance=dark; fi
+          xcrun simctl ui "$DEVICE" appearance "$appearance"
+          if [[ "$SUITE" == "chat" ]]; then
+            xcodebuild test -project ShiftReminder.xcodeproj -scheme ShiftReminder \
+              -destination "id=$DEVICE" -parallel-testing-enabled NO \
+              -only-testing:SiteTests/WuMindFlagshipAcceptanceTests \
+              -only-testing:SiteTests/WuMindLiveAcceptanceTests \
+              -resultBundlePath wumind-acceptance.xcresult CODE_SIGNING_ALLOWED=NO \
+              | tee wumind-acceptance.log | tail -n 80
+            xcrun simctl uninstall "$DEVICE" com.kriswu.shiftreminder || true
+          fi
+          case "$SUITE" in
+            chat)
+              tests=(DeepSeekChatNavigationTests/testPersonalKeySetupFromChat
+                     DeepSeekChatNavigationTests/testStreamingScrollAndStopOnIdenticalOfflineInput
+                     DeepSeekChatNavigationTests/testChatCodePreviewRunsAndSavesAnEditableVersion
+                     DeepSeekChatNavigationTests/testWuMindTranscriptDefaultsToFoldedAndCanScroll
+                     DeepSeekChatNavigationTests/testWuMindVideoGenerationStageLayoutWithoutNetwork)
+              ;;
+            navigation)
+              tests=(DeepSeekChatNavigationTests/testWorkspaceLauncherHomeColdStartRoundTripAndDraftPreservation
+                     DeepSeekChatNavigationTests/testDutyLargeTextCalendarFromLauncher
+                     DeepSeekChatNavigationTests/testGroundStationAddSaveWithKeyboardOpenAndReEdit
+                     DeepSeekChatNavigationTests/testDeepSubpageHidesBottomTabBarAndRestoresOnPop
+                     DeepSeekChatNavigationTests/testWuMindAdminBillingNonOcclusion
+                     ExternalLoginFormTests/testExternalLoginFormAllowsKeyboardDismissAndMethodSwitch)
+              ;;
+            tools)
+              tests=(DeepSeekChatNavigationTests/testWuMindCleanLayoutAndToolSearch
+                     DeepSeekChatNavigationTests/testWorkbenchOpensOriginalTenToolsDirectly
+                     DeepSeekChatNavigationTests/testDutyWorkbenchPassPlanAndTenderNavigation)
+              ;;
+            games)
+              tests=(StarTrialFlowTests/testBrandPrimaryEntryAndAccessibleListPicking
+                     TileFlowTests/testJourneyStartsPicksUndoesAndReturnsHome
+                     DuelFlowTests/testLargestTextKeepsLobbySelectionAndPracticeReachable)
+              ;;
+            *) exit 2 ;;
+          esac
+          selectors=()
+          for name in "${tests[@]}"; do selectors+=("-only-testing:ArenaFlowTests/$name"); done
           xcodebuild test -project ShiftReminder.xcodeproj -scheme ArenaFlow \
             -destination "id=$DEVICE" -parallel-testing-enabled NO \
-            -only-testing:ArenaFlowTests/DeepSeekChatNavigationTests/testPersonalKeySetupFromChat \
-            -only-testing:ArenaFlowTests/DeepSeekChatNavigationTests/testWuMindCleanLayoutAndToolSearch \
-            -only-testing:ArenaFlowTests/DeepSeekChatNavigationTests/testStreamingScrollAndStopOnIdenticalOfflineInput \
-            -only-testing:ArenaFlowTests/DeepSeekChatNavigationTests/testChatCodePreviewRunsAndSavesAnEditableVersion \
-            -only-testing:ArenaFlowTests/DeepSeekChatNavigationTests/testWuMindTranscriptDefaultsToFoldedAndCanScroll \
-            -only-testing:ArenaFlowTests/DeepSeekChatNavigationTests/testWuMindVideoGenerationStageLayoutWithoutNetwork \
-            -resultBundlePath wumind-layout.xcresult CODE_SIGNING_ALLOWED=NO \
+            "${selectors[@]}" -resultBundlePath wumind-layout.xcresult CODE_SIGNING_ALLOWED=NO \
             | tee wumind-layout.log | tail -n 100
       - name: Extract layout proof
         if: always()
@@ -82,6 +120,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: wumind-layout-proof-${{ matrix.device }}
+          name: wumind-layout-proof-${{ matrix.device }}-${{ matrix.suite }}
           path: wumind-layout-proof/
           if-no-files-found: ignore
