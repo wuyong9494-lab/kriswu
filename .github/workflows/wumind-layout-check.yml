@@ -41,6 +41,7 @@ jobs:
           test -d /Applications/Xcode_26.6.app
           sudo xcode-select -s /Applications/Xcode_26.6.app
           command -v xcodegen >/dev/null || brew install xcodegen
+          python3 scripts/test_validate_wumind_gateway_build.py
           xcodegen generate
       - name: Run focused WuMind recovery, editing and chat checks
         run: |
