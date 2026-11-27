@@ -87,6 +87,8 @@ jobs:
                      DeepSeekChatNavigationTests/testDutyLargeTextCalendarFromLauncher
                      DeepSeekChatNavigationTests/testGroundStationAddSaveWithKeyboardOpenAndReEdit
                      DeepSeekChatNavigationTests/testDeepSubpageHidesBottomTabBarAndRestoresOnPop
+                     DeepSeekChatNavigationTests/testDutySettingsOpensEncryptedSync
+                     DutyRecordNavigationTests/testCreateEditAndReopenNoteFromWorkspace
                      DeepSeekChatNavigationTests/testWuMindAdminBillingNonOcclusion
                      DeepSeekChatNavigationTests/testExternalLoginFormAllowsKeyboardDismissAndMethodSwitch)
               ;;

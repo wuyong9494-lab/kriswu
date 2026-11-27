@@ -16,24 +16,11 @@ struct ArenaSeasonSheet: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            HStack(spacing: 6) {
-                ForEach(Tab.allCases) { item in
-                    Button {
-                        tab = item
-                        opened = nil
-                    } label: {
-                        Text(item.rawValue)
-                            .font(.system(size: 14, weight: .black, design: .rounded))
-                            .foregroundStyle(.white)
-                            .arenaOutline(1)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 36)
-                            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(tab == item ? Color(red: 0.55, green: 0.35, blue: 0.95) : .black.opacity(0.35)))
-                            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(.black.opacity(0.65), lineWidth: 2))
-                    }
-                    .buttonStyle(.plain)
-                }
+            Picker("赛季", selection: $tab) {
+                ForEach(Tab.allCases) { item in Text(item.rawValue).tag(item) }
             }
+            .pickerStyle(.segmented)
+            .onChange(of: tab) { _ in opened = nil }
             ZStack(alignment: .bottom) {
                 ScrollView {
                     switch tab {

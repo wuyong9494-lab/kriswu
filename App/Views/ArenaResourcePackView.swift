@@ -10,6 +10,7 @@ struct ArenaResourcePackView: View {
     var onSelectHero: ((ArenaSourceHero) -> Void)?
     var onProjectHeroes: (() -> Void)?
     @ObservedObject private var store = ArenaResourcePackStore.shared
+    @Environment(\.dynamicTypeSize) private var typeSize
     @State private var page = Page.heroes
     @State private var picking = false
     @State private var selectedMap: ArenaResourcePackManifest.Map?
@@ -20,7 +21,8 @@ struct ArenaResourcePackView: View {
     var body: some View {
         ArenaMenuScreen(title: "原版资源", onClose: onClose, scrollContent: false) {
             VStack(alignment: .leading, spacing: 10) {
-                HStack {
+                let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading)) : AnyLayout(HStackLayout())
+                layout {
                     if let manifest = store.manifest {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("原资源 \(manifest.heroes.count) 条英雄配置 · \(manifest.maps.count) 个布局 · \(manifest.music.count) 首音乐")
@@ -314,11 +316,16 @@ private struct ArenaResourceMapView: View {
                             }
                         }
                     }
-                    Text("棕色：阻挡移动 · 绿色：草丛 · 蓝色：水域 · 紫色：含义待确认")
+                    .accessibilityLabel("地图布局，\(map.width) 列，\(map.height) 行")
+                    Text("棕色阻挡移动，绿色为草丛，蓝色为水域，紫色待确认。")
                         .font(.caption).multilineTextAlignment(.center)
-                    Text("布局预览，不代表原版环境画面或已经可玩。\(map.unresolvedCells) 个格子的规则待确认。")
+                    Text("布局预览 · \(map.unresolvedCells) 格规则待确认")
                         .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
-                } else { Text(error ?? "正在读取布局…") }
+                } else if let error {
+                    AppErrorBannerCard(message: error)
+                } else {
+                    ProgressView("正在读取布局…")
+                }
             }.padding().navigationTitle(map.title)
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
         }

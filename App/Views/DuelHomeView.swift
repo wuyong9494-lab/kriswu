@@ -288,7 +288,6 @@ struct DuelHomeView: View {
                     Spacer()
                 }
                 VStack(alignment: .trailing, spacing: 3) {
-                    Text("武者大厅").font(.caption.weight(.semibold)).tracking(2)
                     Text(DuelSourceMusic.temporaryLobbyNotice).font(.caption2)
                         .accessibilityIdentifier("duel.lobby.musicProvenance")
                 }
@@ -498,7 +497,7 @@ struct DuelHomeView: View {
 
     private var stackedActions: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("裂隙对决").font(.title2.bold())
+            Text("裂隙对决").font(DS.Font.title).accessibilityAddTraits(.isHeader)
             sectionTitle("选择武者")
             ForEach(choices, id: \.self) { choice in heroButton(choice) }
             difficultyPicker
