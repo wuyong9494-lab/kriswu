@@ -266,7 +266,7 @@ private struct WuMindOfflineHTMLPreview: UIViewRepresentable {
         var loadedHTML: String?
 
         func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction,
-                     decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+                     decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void) {
             decisionHandler(action.request.url?.scheme == "about" ? .allow : .cancel)
         }
     }

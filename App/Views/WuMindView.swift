@@ -2759,7 +2759,7 @@ private final class WuMindScrollGeometry: ObservableObject {
 }
 
 private struct WuMindScrollFollower: View {
-    static let viewport = "wumind.transcript.viewport"
+    nonisolated static let viewport = "wumind.transcript.viewport"
     let streamBuffer: WuMindStreamBuffer
     let viewportHeight: CGFloat
     let baseline: Bool

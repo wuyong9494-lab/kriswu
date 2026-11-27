@@ -1511,12 +1511,22 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-demo", "-screen", "today"]
+        XCUIDevice.shared.orientation = .portrait
         app.launch()
-        ensurePortrait(app)
         defer { app.terminate() }
 
+        // A cold start can briefly expose an empty window. Wait for the actual
+        // workspace tab before checking orientation or exercising navigation.
         let settingsTab = app.buttons["app.tab.设置"]
-        XCTAssertTrue(settingsTab.waitForExistence(timeout: 15), "一级首页缺少底部「设置」标签")
+        guard settingsTab.waitForExistence(timeout: 25) else {
+            let capture = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            capture.name = "Deep-subpage-workspace-launch-failure"
+            capture.lifetime = .keepAlways
+            add(capture)
+            XCTFail("启动后未进入一级工作区：缺少底部「设置」标签")
+            return
+        }
+        ensurePortrait(app)
         XCTAssertTrue(settingsTab.isHittable)
         settingsTab.tap()
 

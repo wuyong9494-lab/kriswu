@@ -780,6 +780,7 @@ struct WuMindPPTStudioView: View {
 
     private func settingsSheet(_ mode: SettingsMode) -> some View {
         let theme = mode == .rebuild ? $rebuildTheme : Binding(get: { workflow.theme }, set: { workflow.applyTheme($0) })
+        let logoActionTitle = workflow.companyLogoBase64 == nil ? "添加公司 Logo" : "更换公司 Logo"
         return NavigationStack {
             Form {
                 if mode == .rebuild {
@@ -826,7 +827,7 @@ struct WuMindPPTStudioView: View {
                     .disabled(workflow.generating)
                     .accessibilityIdentifier("ai.ppt.uploadPhoto")
                     PhotosPicker(selection: $pickedLogoItem, matching: .images) {
-                        Label(workflow.companyLogoBase64 == nil ? "添加公司 Logo" : "更换公司 Logo", systemImage: "building.2")
+                        Label(logoActionTitle, systemImage: "building.2")
                     }
                     .disabled(workflow.generating)
                     .accessibilityIdentifier("ai.ppt.uploadLogo")
