@@ -937,6 +937,10 @@ final class WuMindStore: ObservableObject {
 
     /// True once the current user (internal duty staff OR external user) has registered a WUMIND user profile.
     var isRegisteredWuMindUser: Bool {
+        if let external = AppAccountManager.shared.externalProfile, external.wumindUserID == managedAccountID,
+           AppAccountManager.shared.accessRole == .externalUser, managedSessionToken != nil {
+            return true
+        }
         let hasName = !registeredDisplayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let hasAccount = !managedAccountID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || (managedSessionToken?.isEmpty == false)
