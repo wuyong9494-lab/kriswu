@@ -1,11 +1,11 @@
 {
-  "channel": "testflight-internal",
+  "channel": "testflight-external",
   "bundle_id": "com.kriswu.shiftreminder",
   "version": "1.2",
   "min_build_floor": 715,
   "source_branch": "codex/integrated-duty-ai-duel-20261124",
-  "source_sha": "9aed273ecc0ee657bbe3ed94b57f7871e2a952e3",
-  "source_run_id": 45867182619,
+  "source_sha": "f100c74c285ca63b09bb8de28e993ff3960de255",
+  "source_run_id": 45961758402,
   "notify_external_testers": false,
-  "notes": "WuMind / 值班提醒内测：进入值班工作区的指定入口不再被更新提示打断；模型调用信息区分所选、实际发出和服务商报告的模型，首段正文耗时独立统计；iPhone 和 iPad 均可从 3D 工坊工具栏直接打开技术库。此版未更改 AIHubMix Wan 2.6 视频接入。"
+  "notes": "WuMind / 值班提醒：视频生成使用全屏黑色点阵界面，底部显示进度与提示词，支持返回聊天继续生成；停止前二次确认。生成完成后支持全屏预览、播放、静音和分享。WuMind 标题缩为单行。"
 }
