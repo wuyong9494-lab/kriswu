@@ -189,6 +189,24 @@ jobs:
               signing=(CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=-)
             fi
           done
+          # Diagnostics only: while the app holds a core (the iPhone long-history run
+          # stops answering UI queries once the offline stream starts), keep a few
+          # stack samples so the busy code path is in the uploaded proof.
+          mkdir -p wumind-hang-samples
+          (
+            taken=0
+            while (( taken < 6 )); do
+              sleep 15
+              pid=$(pgrep -f '/ShiftReminder\.app/ShiftReminder( |$)' | head -n 1 || true)
+              [[ -n "$pid" ]] || continue
+              cpu=$(ps -o %cpu= -p "$pid" 2>/dev/null | awk '{print int($1)}' || true)
+              (( ${cpu:-0} >= 85 )) || continue
+              sample "$pid" 3 -file "wumind-hang-samples/sample-$(date +%H%M%S)-cpu${cpu}.txt" >/dev/null 2>&1 || true
+              taken=$((taken + 1))
+            done
+          ) &
+          sampler=$!
+          trap 'kill "$sampler" 2>/dev/null || true' EXIT
           xcodebuild test -project ShiftReminder.xcodeproj -scheme ArenaFlow \
             -destination "id=$DEVICE" -parallel-testing-enabled NO \
             "${selectors[@]}" -resultBundlePath wumind-layout.xcresult "${signing[@]}" \
@@ -199,6 +217,7 @@ jobs:
           mkdir -p wumind-layout-proof
           if [ -f wumind-acceptance.log ]; then cp wumind-acceptance.log wumind-layout-proof/; fi
           if [ -f wumind-layout.log ]; then cp wumind-layout.log wumind-layout-proof/; fi
+          if [ -d wumind-hang-samples ]; then cp -R wumind-hang-samples wumind-layout-proof/; fi
           if [ -d wumind-layout.xcresult ]; then
             xcrun xcresulttool export attachments --path wumind-layout.xcresult --output-path wumind-layout-proof
           fi
