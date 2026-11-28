@@ -3443,15 +3443,13 @@ private struct WuMindTurnView: View, Equatable {
             .accessibilityValue(expanded ? "已展开" : "已收起")
             if expanded {
                 if let liveAnswer, streamSmoothMode || longAnswer, !liveAnswer.completeBlocks.isEmpty {
-                    VStack(alignment: .leading, spacing: 5) {
-                        ForEach(liveAnswer.completeBlocks.indices, id: \.self) { index in
-                            Text(verbatim: liveAnswer.completeBlocks[index])
-                        }
-                        Text(verbatim: liveAnswer.tail.isEmpty ? "\u{200B}" : liveAnswer.tail)
-                    }
-                    .font(.system(size: streamingBodySize)).lineSpacing(5)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .accessibilityIdentifier("wumind.answer.full")
+                    // Keep one live text element rather than adding an accessibility
+                    // node and layout child for every streamed paragraph. Completed
+                    // replies still use the normal Markdown renderer below.
+                    Text(verbatim: liveAnswer.text)
+                        .font(.system(size: streamingBodySize)).lineSpacing(5)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityIdentifier("wumind.answer.full")
                 } else {
                     WuMindMarkdownView(
                         text: turn.answer,

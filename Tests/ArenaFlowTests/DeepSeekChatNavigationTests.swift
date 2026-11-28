@@ -640,9 +640,16 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         own.tap()
         let provider = app.buttons["wumind.provider.menu"]
         XCTAssertTrue(provider.waitForExistence(timeout: 8) && provider.isHittable)
-        provider.tap()
-        app.buttons["DeepSeek"].tap()
-        let pro = app.buttons.containing(.staticText, identifier: "DeepSeek V4 Pro").firstMatch
+        if provider.label != "DeepSeek" {
+            provider.tap()
+            let deepSeek = app.buttons.matching(NSPredicate(
+                format: "label == %@ AND identifier != %@", "DeepSeek", "wumind.provider.menu"
+            )).firstMatch
+            XCTAssertTrue(deepSeek.waitForExistence(timeout: 8) && deepSeek.isHittable)
+            deepSeek.tap()
+        }
+        let pro = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "DeepSeek V4 Pro"))
+            .firstMatch
         for _ in 0..<3 where !pro.isHittable { app.swipeUp() }
         XCTAssertTrue(pro.waitForExistence(timeout: 8) && pro.isHittable, "未能选择支持深度思考的 DeepSeek V4 Pro")
         pro.tap()
@@ -1078,11 +1085,27 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         add(studioIdleShot)
 
         let inspiration = app.buttons["ai.image.inspiration.wildlife"]
-        if inspiration.waitForExistence(timeout: 4) && inspiration.isHittable {
-            inspiration.tap()
-            usleep(250_000)
-            XCTAssertTrue(app.buttons["ai.image.generate"].isEnabled, "点击灵感模板后生成按钮应立即可用")
+        // iPhone can expose an off-screen lazy-grid node as hittable. Move the
+        // actual tile into the safe content area before tapping it.
+        func visibleInImageStudio(_ element: XCUIElement) -> Bool {
+            guard element.exists, element.isHittable else { return false }
+            let y = element.frame.midY
+            return y > app.navigationBars["画室"].frame.maxY + 8
+                && y < app.buttons["ai.image.generate"].frame.minY - 8
         }
+        for _ in 0..<6 where !visibleInImageStudio(inspiration) { app.swipeUp(velocity: .slow) }
+        XCTAssertTrue(visibleInImageStudio(inspiration), "未滚动到可点击的荒野大象模板")
+        inspiration.tap()
+        let generate = app.buttons["ai.image.generate"]
+        let templateLoaded = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in generate.isEnabled }, object: nil
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [templateLoaded], timeout: 6), .completed,
+                       "点击可见灵感模板后，应填入有效提示词并启用生成")
+        for _ in 0..<6 where !visibleInImageStudio(promptField) { app.swipeDown(velocity: .slow) }
+        XCTAssertTrue(visibleInImageStudio(promptField))
+        XCTAssertTrue((promptField.value as? String)?.contains("非洲草原晨雾") == true,
+                      "画室没有把所选模板填入提示词")
 
         promptField.tap()
         usleep(350_000)
