@@ -1246,119 +1246,144 @@ struct WuMindWorkspaceView: View {
         return false
     }
 
+    /// The last turn while it is being generated; rendered after the lazy stack.
+    private var liveTranscriptTail: WuMindTurn? {
+        guard let last = turns.last, store.activeTurnID == last.id else { return nil }
+        return last
+    }
+
+    private var lazyTranscriptTurns: [WuMindTurn] {
+        liveTranscriptTail == nil ? turns : Array(turns.dropLast())
+    }
+
+    @ViewBuilder
+    private func transcriptRow(_ turn: WuMindTurn) -> some View {
+        if store.activeTurnID == turn.id {
+            WuMindStreamingTurnView(
+                turn: turn,
+                streamBuffer: store.streamBuffer,
+                baseline: usesBaselineStreamPresentation,
+                streamSmoothMode: store.preferences.streamSmoothMode,
+                thinkingStartedAt: store.thinkingStartedAt,
+                elevatedSurface: elevatedSurface,
+                subtleBorder: subtleBorder,
+                onCopy: copyText,
+                onRetryPrompt: { prompt in
+                    draftState.setText(prompt)
+                    composerFocused = true
+                },
+                onRegenerate: {
+                    guard !generating else { return }
+                    draftState.setText(turn.question)
+                    requestSend()
+                },
+                onManageKey: {
+                    showingKeyFor = turn.provider
+                },
+                onOpenWallet: {
+                    showingWallet = true
+                }
+            )
+        } else {
+            let canRecover = !isTemporaryChat && (turn.clientRequestID?.isEmpty == false)
+            WuMindTurnView(
+                turn: turn,
+                isLast: turn.id == turns.last?.id,
+                isGenerating: turn.state == .generating,
+                liveElapsedSeconds: isTemporaryChat ? temporaryElapsedSeconds : 1,
+                thinkingStartedAt: nil,
+                elevatedSurface: elevatedSurface,
+                subtleBorder: subtleBorder,
+                onCopy: copyText,
+                onRetryPrompt: { prompt in
+                    draftState.setText(prompt)
+                    composerFocused = true
+                },
+                onRegenerate: {
+                    guard !generating else { return }
+                    draftState.setText(turn.question)
+                    requestSend()
+                },
+                onManageKey: {
+                    showingKeyFor = turn.provider
+                },
+                onOpenWallet: {
+                    showingWallet = true
+                },
+                onCompare: isTemporaryChat ? nil : {
+                    dismissKeyboard()
+                    comparingTurn = turn
+                },
+                onAdoptComparison: { compID in
+                    if let cid = store.activeConversationID {
+                        store.adoptComparison(conversationID: cid, turnID: turn.id, comparisonID: compID)
+                        Haptics.success()
+                        ToastCenter.shared.show("已标记采纳该复核版本", style: .success)
+                    }
+                },
+                onRecoverTask: canRecover ? {
+                    guard let cid = store.activeConversationID else { return }
+                    Task { @MainActor in
+                        let msg = await store.recoverInterruptedTurn(conversationID: cid, turnID: turn.id)
+                        ToastCenter.shared.show(msg, style: msg.contains("恢复") ? .success : .info)
+                    }
+                } : nil
+            )
+            .equatable()
+        }
+        if let workID = turn.chatBuildWorkID { chatBuildCard(id: workID) }
+    }
+
     private var transcriptView: some View {
         GeometryReader { viewportGeo in
             ScrollViewReader { scroller in
                 ZStack(alignment: .bottomTrailing) {
                     anchorTranscriptGrowth(ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 22) {
-                            if turns.isEmpty {
-                                welcomeCanvas
-                                    .frame(minHeight: max(0, viewportGeo.size.height - 44))
-                            } else {
-                                if !isTemporaryChat,
-                                   let convo = store.activeConversation,
-                                   let summary = convo.compactedSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
-                                   !summary.isEmpty {
-                                    compactedMemoryCard(
-                                        conversationID: convo.id,
-                                        summary: summary,
-                                        compactedCount: max(1, convo.safeCompactedTurnCount)
-                                    )
-                                }
-                                if !isTemporaryChat && store.compactingContext {
-                                    HStack(spacing: 8) {
-                                        ProgressView().controlSize(.small)
-                                        Text("正在自动压缩早期上下文（保留最近对话 verbatim）…")
-                                            .font(.caption.weight(.medium))
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 9)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .background(Color.indigo.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                            .strokeBorder(Color.indigo.opacity(0.22), lineWidth: 0.8)
-                                    )
-                                    .accessibilityIdentifier("wumind.context.compacting")
-                                }
-                                ForEach(turns) { turn in
-                                    if store.activeTurnID == turn.id {
-                                        WuMindStreamingTurnView(
-                                            turn: turn,
-                                            streamBuffer: store.streamBuffer,
-                                            baseline: usesBaselineStreamPresentation,
-                                            streamSmoothMode: store.preferences.streamSmoothMode,
-                                            thinkingStartedAt: store.thinkingStartedAt,
-                                            elevatedSurface: elevatedSurface,
-                                            subtleBorder: subtleBorder,
-                                            onCopy: copyText,
-                                            onRetryPrompt: { prompt in
-                                                draftState.setText(prompt)
-                                                composerFocused = true
-                                            },
-                                            onRegenerate: {
-                                                guard !generating else { return }
-                                                draftState.setText(turn.question)
-                                                requestSend()
-                                            },
-                                            onManageKey: {
-                                                showingKeyFor = turn.provider
-                                            },
-                                            onOpenWallet: {
-                                                showingWallet = true
-                                            }
+                        VStack(alignment: .leading, spacing: 22) {
+                            LazyVStack(alignment: .leading, spacing: 22) {
+                                if turns.isEmpty {
+                                    welcomeCanvas
+                                        .frame(minHeight: max(0, viewportGeo.size.height - 44))
+                                } else {
+                                    if !isTemporaryChat,
+                                       let convo = store.activeConversation,
+                                       let summary = convo.compactedSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
+                                       !summary.isEmpty {
+                                        compactedMemoryCard(
+                                            conversationID: convo.id,
+                                            summary: summary,
+                                            compactedCount: max(1, convo.safeCompactedTurnCount)
                                         )
-                                    } else {
-                                        let canRecover = !isTemporaryChat && (turn.clientRequestID?.isEmpty == false)
-                                        WuMindTurnView(
-                                            turn: turn,
-                                            isLast: turn.id == turns.last?.id,
-                                            isGenerating: turn.state == .generating,
-                                            liveElapsedSeconds: isTemporaryChat ? temporaryElapsedSeconds : 1,
-                                            thinkingStartedAt: nil,
-                                            elevatedSurface: elevatedSurface,
-                                            subtleBorder: subtleBorder,
-                                            onCopy: copyText,
-                                            onRetryPrompt: { prompt in
-                                                draftState.setText(prompt)
-                                                composerFocused = true
-                                            },
-                                            onRegenerate: {
-                                                guard !generating else { return }
-                                                draftState.setText(turn.question)
-                                                requestSend()
-                                            },
-                                            onManageKey: {
-                                                showingKeyFor = turn.provider
-                                            },
-                                            onOpenWallet: {
-                                                showingWallet = true
-                                            },
-                                            onCompare: isTemporaryChat ? nil : {
-                                                dismissKeyboard()
-                                                comparingTurn = turn
-                                            },
-                                            onAdoptComparison: { compID in
-                                                if let cid = store.activeConversationID {
-                                                    store.adoptComparison(conversationID: cid, turnID: turn.id, comparisonID: compID)
-                                                    Haptics.success()
-                                                    ToastCenter.shared.show("已标记采纳该复核版本", style: .success)
-                                                }
-                                            },
-                                            onRecoverTask: canRecover ? {
-                                                guard let cid = store.activeConversationID else { return }
-                                                Task { @MainActor in
-                                                    let msg = await store.recoverInterruptedTurn(conversationID: cid, turnID: turn.id)
-                                                    ToastCenter.shared.show(msg, style: msg.contains("恢复") ? .success : .info)
-                                                }
-                                            } : nil
-                                        )
-                                        .equatable()
                                     }
-                                    if let workID = turn.chatBuildWorkID { chatBuildCard(id: workID) }
+                                    if !isTemporaryChat && store.compactingContext {
+                                        HStack(spacing: 8) {
+                                            ProgressView().controlSize(.small)
+                                            Text("正在自动压缩早期上下文（保留最近对话 verbatim）…")
+                                                .font(.caption.weight(.medium))
+                                                .foregroundStyle(.secondary)
+                                        }
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 9)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .background(Color.indigo.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                                .strokeBorder(Color.indigo.opacity(0.22), lineWidth: 0.8)
+                                        )
+                                        .accessibilityIdentifier("wumind.context.compacting")
+                                    }
+                                    ForEach(lazyTranscriptTurns) { turn in
+                                        transcriptRow(turn)
+                                    }
                                 }
+                            }
+                            // The reply being streamed sits outside the LazyVStack: its height
+                            // changes on every stream tick, and inside the lazy stack that kept
+                            // LazySubviewPlacements re-estimating all rows, adjusting the offset
+                            // and signalling prefetch in a loop that pinned the main thread on
+                            // iPhone (stack samples from WuMind Layout Check run 46110672767).
+                            if let live = liveTranscriptTail {
+                                transcriptRow(live)
                             }
                             HStack(spacing: 0) {
                                 #if DEBUG
@@ -3493,13 +3518,22 @@ private struct WuMindTurnView: View, Equatable {
             .accessibilityValue(expanded ? "已展开" : "已收起")
             if expanded {
                 if let liveAnswer, streamSmoothMode || longAnswer, !liveAnswer.completeBlocks.isEmpty {
-                    // Keep one live text element rather than adding an accessibility
-                    // node and layout child for every streamed paragraph. Completed
-                    // replies still use the normal Markdown renderer below.
-                    Text(verbatim: liveAnswer.text)
-                        .font(.system(size: streamingBodySize)).lineSpacing(5)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .accessibilityIdentifier("wumind.answer.full")
+                    // Sealed blocks (>= 768 bytes each) never change again, so only the
+                    // short tail is typeset on a stream tick. One Text holding the whole
+                    // reply is laid out again in full on every tick: with ~25 KB on screen
+                    // UI queries went from ~0.1 s to 5-10 s and the jump to the latest
+                    // reply timed out (WuMind Layout Check on iPad: run 46086325159
+                    // passed with blocks, 46088987407 failed with the single Text).
+                    // Completed replies still use the normal Markdown renderer below.
+                    VStack(alignment: .leading, spacing: 5) {
+                        ForEach(liveAnswer.completeBlocks.indices, id: \.self) { index in
+                            Text(verbatim: liveAnswer.completeBlocks[index])
+                        }
+                        Text(verbatim: liveAnswer.tail.isEmpty ? "\u{200B}" : liveAnswer.tail)
+                    }
+                    .font(.system(size: streamingBodySize)).lineSpacing(5)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("wumind.answer.full")
                 } else {
                     WuMindMarkdownView(
                         text: turn.answer,
