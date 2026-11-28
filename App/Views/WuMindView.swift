@@ -149,6 +149,7 @@ struct WuMindWorkspaceView: View {
     @State private var showVideoStageFixture = false
     @FocusState private var composerFocused: Bool
 
+    @State private var transcriptJumpRequest = 0
     private let bottomAnchor = "wumind.chat.bottom"
     private let questionLimit = 200_000
 
@@ -1231,10 +1232,10 @@ struct WuMindWorkspaceView: View {
     @ViewBuilder
     private func anchorTranscriptGrowth<Content: View>(_ content: Content) -> some View {
         if #available(iOS 18, *), !usesBaselineStreamPresentation {
-            content.defaultScrollAnchor(
-                generatingInCurrentConversation && scrollFollow.shouldAutoScrollOnStreamTick ? .bottom : .top,
-                for: .sizeChanges
-            )
+            content.modifier(WuMindNativeTranscriptAnchor(
+                followsGrowth: generatingInCurrentConversation && scrollFollow.shouldAutoScrollOnStreamTick,
+                jumpRequest: transcriptJumpRequest
+            ))
         } else {
             content
         }
@@ -1428,10 +1429,14 @@ struct WuMindWorkspaceView: View {
                                     print("WUMIND_HISTORY jumpToLatest=true")
                                 }
                                 #endif
-                                var transaction = Transaction()
-                                transaction.disablesAnimations = true
-                                withTransaction(transaction) {
-                                    scroller.scrollTo(bottomAnchor, anchor: .bottom)
+                                if usesNativeTranscriptGrowthAnchor {
+                                    transcriptJumpRequest &+= 1
+                                } else {
+                                    var transaction = Transaction()
+                                    transaction.disablesAnimations = true
+                                    withTransaction(transaction) {
+                                        scroller.scrollTo(bottomAnchor, anchor: .bottom)
+                                    }
                                 }
                             }
                         } label: {
@@ -2772,6 +2777,24 @@ private struct WuMindHistoryStreamProgress: View {
     }
 }
 #endif
+
+@available(iOS 18.0, *)
+private struct WuMindNativeTranscriptAnchor: ViewModifier {
+    let followsGrowth: Bool
+    let jumpRequest: Int
+    @State private var position = ScrollPosition()
+
+    func body(content: Content) -> some View {
+        content
+            .defaultScrollAnchor(followsGrowth ? .bottom : .top, for: .sizeChanges)
+            .scrollPosition($position)
+            .onChange(of: jumpRequest) { _, _ in
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) { position.scrollTo(edge: .bottom) }
+            }
+    }
+}
 
 /// Geometry stays local to this observer. Offsets update during scrolling without invalidating chat rows.
 private final class WuMindScrollGeometry: ObservableObject {

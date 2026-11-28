@@ -228,6 +228,11 @@ final class WuMindStudioNavigationTests: XCTestCase {
             tap(visibleAppName)
         }
         let save = app.buttons["保存到收件箱"]
+        // The popover can move as its preview loads on iPad. Retry selection
+        // only if the same system tile is still on screen and no importer is open.
+        if !save.waitForExistence(timeout: 6), shareTarget.exists, shareTarget.isHittable {
+            shareTarget.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45)).tap()
+        }
         XCTAssertTrue(save.waitForExistence(timeout: 12) && save.isEnabled)
         XCTAssertGreaterThanOrEqual(save.frame.height, 44)
         capture("Tender-ShareExtension-Ready")

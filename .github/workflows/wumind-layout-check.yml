@@ -13,6 +13,7 @@ on:
       - 'App/Views/WuMindInChatConnectorsSheet.swift'
       - 'App/Services/WuMindChatBuildService.swift'
       - 'Tests/ArenaFlowTests/DeepSeekChatNavigationTests.swift'
+      - 'Tests/ArenaFlowTests/WuMindStudioNavigationTests.swift'
       - '.github/workflows/wumind-layout-check.yml'
   workflow_dispatch:
     inputs:
@@ -59,6 +60,10 @@ jobs:
         DeepSeekChatNavigationTests/testProviderChooserOpensWithoutContactingAI
         DeepSeekChatNavigationTests/testLongHistoryReachesBothEndsAndKeepsReadingPositionDuringStreaming
       FLAGSHIP_PUSH: ${{ github.event_name == 'push' && github.ref_name == 'codex/wumind-flagship-next' }}
+      TARGETED_PUSH: ${{ contains(github.event.head_commit.message, '[wumind targeted check]') }}
+      TARGETED_TESTS: |-
+        DeepSeekChatNavigationTests/testLongHistoryReachesBothEndsAndKeepsReadingPositionDuringStreaming
+        WuMindStudioNavigationTests/testShareLocalPDFToTenderInboxFromWorkbench
       DEVICE_FAMILY: ${{ matrix.device }}
     timeout-minutes: 60
     steps:
@@ -99,7 +104,10 @@ jobs:
               | tee wumind-acceptance.log | tail -n 80
             xcrun simctl uninstall "$DEVICE" com.kriswu.shiftreminder || true
           fi
-          if [[ "$FLAGSHIP_PUSH" == true ]]; then SELECTED_TESTS="$FLAGSHIP_TARGETS"; fi
+          if [[ "$FLAGSHIP_PUSH" == true ]]; then
+            SELECTED_TESTS="$FLAGSHIP_TARGETS"
+            if [[ "$TARGETED_PUSH" == true ]]; then SELECTED_TESTS="$TARGETED_TESTS"; fi
+          fi
           case "$SUITE" in
             chat)
               tests=(DeepSeekChatNavigationTests/testPersonalKeySetupFromChat
