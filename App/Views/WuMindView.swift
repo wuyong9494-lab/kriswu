@@ -1226,11 +1226,30 @@ struct WuMindWorkspaceView: View {
         #endif
     }
 
+    // When following the reply, let the scroll view compensate for content growth
+    // during layout rather than submitting another scrollTo on every height change.
+    @ViewBuilder
+    private func anchorTranscriptGrowth<Content: View>(_ content: Content) -> some View {
+        if #available(iOS 18, *), !usesBaselineStreamPresentation {
+            content.defaultScrollAnchor(
+                generatingInCurrentConversation && scrollFollow.shouldAutoScrollOnStreamTick ? .bottom : .top,
+                for: .sizeChanges
+            )
+        } else {
+            content
+        }
+    }
+
+    private var usesNativeTranscriptGrowthAnchor: Bool {
+        if #available(iOS 18, *) { return !usesBaselineStreamPresentation }
+        return false
+    }
+
     private var transcriptView: some View {
         GeometryReader { viewportGeo in
             ScrollViewReader { scroller in
                 ZStack(alignment: .bottomTrailing) {
-                    ScrollView {
+                    anchorTranscriptGrowth(ScrollView {
                         LazyVStack(alignment: .leading, spacing: 22) {
                             if turns.isEmpty {
                                 welcomeCanvas
@@ -1352,7 +1371,7 @@ struct WuMindWorkspaceView: View {
                             .id(bottomAnchor)
                         }
                         .background {
-                            if generatingInCurrentConversation && scrollFollow.shouldAutoScrollOnStreamTick {
+                            if !usesNativeTranscriptGrowthAnchor && generatingInCurrentConversation && scrollFollow.shouldAutoScrollOnStreamTick {
                                 WuMindScrollFollower(
                                     streamBuffer: store.streamBuffer,
                                     viewportHeight: viewportGeo.size.height,
@@ -1374,7 +1393,7 @@ struct WuMindWorkspaceView: View {
                         .padding(.bottom, 16)
                         .frame(maxWidth: 760)
                         .frame(maxWidth: .infinity)
-                    }
+                    })
                     .coordinateSpace(name: WuMindScrollFollower.viewport)
                     .accessibilityIdentifier("wumind.transcript.scroll")
                     .scrollDismissesKeyboard(.immediately)

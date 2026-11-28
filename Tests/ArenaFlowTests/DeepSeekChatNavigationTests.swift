@@ -205,7 +205,6 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-demo", "-screen", "wumind", "-wumind-video-stage-qa"]
-        XCUIDevice.shared.orientation = .portrait
         app.launch()
         defer { app.terminate() }
 
@@ -219,6 +218,7 @@ final class DeepSeekChatNavigationTests: XCTestCase {
             XCTFail("视频画布未就绪，应用状态 \(app.state.rawValue)")
             return
         }
+        ensurePortrait(app)
         let window = app.windows.containing(.button, identifier: "wumind.video.stage.close").firstMatch
         XCTAssertTrue(window.exists, "缺少承载视频画布的窗口")
         let viewport = window.frame
