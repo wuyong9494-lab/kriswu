@@ -3493,13 +3493,22 @@ private struct WuMindTurnView: View, Equatable {
             .accessibilityValue(expanded ? "已展开" : "已收起")
             if expanded {
                 if let liveAnswer, streamSmoothMode || longAnswer, !liveAnswer.completeBlocks.isEmpty {
-                    // Keep one live text element rather than adding an accessibility
-                    // node and layout child for every streamed paragraph. Completed
-                    // replies still use the normal Markdown renderer below.
-                    Text(verbatim: liveAnswer.text)
-                        .font(.system(size: streamingBodySize)).lineSpacing(5)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .accessibilityIdentifier("wumind.answer.full")
+                    // Sealed blocks (>= 768 bytes each) never change again, so only the
+                    // short tail is typeset on a stream tick. One Text holding the whole
+                    // reply is laid out again in full on every tick: with ~25 KB on screen
+                    // UI queries went from ~0.1 s to 5-10 s and the jump to the latest
+                    // reply timed out (WuMind Layout Check on iPad: run 46086325159
+                    // passed with blocks, 46088987407 failed with the single Text).
+                    // Completed replies still use the normal Markdown renderer below.
+                    VStack(alignment: .leading, spacing: 5) {
+                        ForEach(liveAnswer.completeBlocks.indices, id: \.self) { index in
+                            Text(verbatim: liveAnswer.completeBlocks[index])
+                        }
+                        Text(verbatim: liveAnswer.tail.isEmpty ? "\u{200B}" : liveAnswer.tail)
+                    }
+                    .font(.system(size: streamingBodySize)).lineSpacing(5)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("wumind.answer.full")
                 } else {
                     WuMindMarkdownView(
                         text: turn.answer,
