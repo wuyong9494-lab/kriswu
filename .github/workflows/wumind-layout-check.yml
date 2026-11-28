@@ -55,6 +55,9 @@ jobs:
         WuMindStudioNavigationTests/testShareLocalPDFToTenderInboxFromWorkbench
         DeepSeekChatNavigationTests/testDeepSubpageHidesBottomTabBarAndRestoresOnPop
         DeepSeekChatNavigationTests/testChatCodePreviewRunsAndSavesAnEditableVersion
+        DeepSeekChatNavigationTests/testOpenChatFromHomeAndReturn
+        DeepSeekChatNavigationTests/testProviderChooserOpensWithoutContactingAI
+        DeepSeekChatNavigationTests/testLongHistoryReachesBothEndsAndKeepsReadingPositionDuringStreaming
       FLAGSHIP_PUSH: ${{ github.event_name == 'push' && github.ref_name == 'codex/wumind-flagship-next' }}
       DEVICE_FAMILY: ${{ matrix.device }}
     timeout-minutes: 60

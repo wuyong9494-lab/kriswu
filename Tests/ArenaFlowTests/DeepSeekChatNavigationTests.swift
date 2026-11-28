@@ -631,9 +631,33 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertTrue(app.buttons["wumind.tab.works"].exists, "缺少作品主标签")
         XCTAssertTrue(app.staticTexts["wumind.chat.greeting"].exists, "空白聊天缺少居中问候")
         XCTAssertGreaterThan(app.buttons["wumind.tab.chat"].frame.midY, composer.frame.midY, "主标签应位于输入框下方")
-        app.buttons["wumind.composer.options"].tap()
-        XCTAssertTrue(app.buttons["wumind.webSearch.toggle"].exists, "对话选项中缺少联网搜索开关")
-        XCTAssertTrue(app.buttons["deepSeek.chat.thinking"].exists, "缺少深度思考切换胶囊")
+
+        // Built-in chat can start with no model selected. Exercise the real model
+        // picker with a reasoning-capable route without sending an API request.
+        app.buttons["wumind.model.picker"].tap()
+        let own = app.buttons["wumind.channel.ownAPI"]
+        XCTAssertTrue(own.waitForExistence(timeout: 8) && own.isHittable)
+        own.tap()
+        let provider = app.buttons["wumind.provider.menu"]
+        XCTAssertTrue(provider.waitForExistence(timeout: 8) && provider.isHittable)
+        provider.tap()
+        app.buttons["DeepSeek"].tap()
+        let pro = app.buttons.containing(.staticText, identifier: "DeepSeek V4 Pro").firstMatch
+        for _ in 0..<3 where !pro.isHittable { app.swipeUp() }
+        XCTAssertTrue(pro.waitForExistence(timeout: 8) && pro.isHittable, "未能选择支持深度思考的 DeepSeek V4 Pro")
+        pro.tap()
+
+        let options = app.buttons["wumind.composer.options"]
+        XCTAssertTrue(options.waitForExistence(timeout: 8) && options.isHittable)
+        options.tap()
+        XCTAssertTrue(app.buttons["wumind.webSearch.toggle"].waitForExistence(timeout: 8), "对话选项中缺少联网搜索开关")
+        let thinking = app.buttons["deepSeek.chat.thinking"]
+        XCTAssertTrue(thinking.waitForExistence(timeout: 8) && thinking.isHittable, "支持深度思考的模型必须可以切换思考模式")
+        let initialThinking = thinking.label
+        thinking.tap()
+        XCTAssertNotEqual(thinking.label, initialThinking)
+        thinking.tap()
+        XCTAssertEqual(thinking.label, initialThinking)
         XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "wumind.attach.open").firstMatch.exists,
                       "对话框下方缺少聊天内连接与上传按钮")
         XCTAssertTrue(app.buttons["wumind.composer.connections"].exists,
@@ -998,16 +1022,28 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "ai.ppt.prompt").firstMatch.waitForExistence(timeout: 8),
                       "AI 写 PPT 工坊输入框未显示")
         XCTAssertTrue(app.buttons["ai.ppt.generate"].exists)
-        XCTAssertTrue(app.buttons["ai.ppt.uploadFile"].exists, "PPT 工坊缺少 Word/PDF/Excel 上传入口")
-        XCTAssertTrue(app.buttons["ai.ppt.uploadPhoto"].exists, "PPT 工坊缺少图片上传入口")
-        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "ai.ppt.uploadLogo").firstMatch.exists, "PPT 工坊缺少公司 Logo 上传入口")
         XCTAssertTrue(app.buttons["ai.ppt.history"].exists, "PPT 工坊缺少历史作品入口")
-        let webToggle = app.buttons["ai.ppt.webSearch"]
-        XCTAssertTrue(webToggle.exists && webToggle.frame.maxX <= app.frame.maxX + 1, "PPT 工坊联网开关不应超出屏幕右边界")
+        let pptSettings = app.buttons["ai.ppt.settings"]
+        XCTAssertTrue(pptSettings.waitForExistence(timeout: 8) && pptSettings.isHittable, "PPT 工坊缺少文稿设置入口")
+        pptSettings.tap()
+        let settingsBar = app.navigationBars["文稿设置"]
+        XCTAssertTrue(settingsBar.waitForExistence(timeout: 8))
+        let webToggle = app.switches["ai.ppt.webSearch"]
+        for _ in 0..<3 where !webToggle.isHittable { app.swipeUp() }
+        XCTAssertTrue(webToggle.isHittable && webToggle.frame.maxX <= app.frame.maxX + 1, "PPT 工坊联网开关应可用且不超出右边界")
+        let documents = app.buttons["ai.ppt.uploadFile"]
+        let photos = app.descendants(matching: .any).matching(identifier: "ai.ppt.uploadPhoto").firstMatch
+        let logo = app.descendants(matching: .any).matching(identifier: "ai.ppt.uploadLogo").firstMatch
+        for _ in 0..<3 where !logo.isHittable { app.swipeUp() }
+        XCTAssertTrue(documents.isHittable, "文稿设置缺少可点击的 Word/PDF/Excel 上传入口")
+        XCTAssertTrue(photos.isHittable, "文稿设置缺少可点击的图片上传入口")
+        XCTAssertTrue(logo.isHittable, "文稿设置缺少可点击的公司 Logo 上传入口")
         let pptShot = XCTAttachment(screenshot: app.screenshot())
         pptShot.name = "WuMind-ppt-studio"
         pptShot.lifetime = .keepAlways
         add(pptShot)
+        settingsBar.buttons["完成"].tap()
+        XCTAssertTrue(pptSettings.waitForExistence(timeout: 8) && pptSettings.isHittable)
         app.navigationBars["幻灯片"].buttons.element(boundBy: 0).tap()
         usleep(300_000)
 
@@ -1511,7 +1547,6 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-demo", "-screen", "today"]
-        XCUIDevice.shared.orientation = .portrait
         app.launch()
         defer { app.terminate() }
 
