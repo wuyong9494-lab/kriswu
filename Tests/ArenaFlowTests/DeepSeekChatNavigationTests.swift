@@ -112,8 +112,17 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         sample.name = "history-108-reading-while-streaming"; sample.lifetime = .keepAlways; add(sample)
 
         follow.tap()
+        let resumed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            follow.label.contains("暂停滚动")
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [resumed], timeout: 8), .completed, "回到最新按钮未恢复跟随")
         let atBottom = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in visible(bottom) }, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [atBottom], timeout: 12), .completed)
+        XCTAssertEqual(XCTWaiter.wait(for: [atBottom], timeout: 12), .completed, "已恢复跟随，但未回到对话末尾")
+        let resumedBytes = Int(bytes.value as? String ?? "") ?? -1
+        let keptFollowing = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            (Int(bytes.value as? String ?? "") ?? 0) > resumedBytes + 140 && visible(bottom)
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [keptFollowing], timeout: 12), .completed, "返回底部后，输出增长时未持续跟随")
         XCTAssertTrue(follow.label.contains("暂停滚动"))
         XCTAssertFalse(visible(first))
         app.buttons["deepseek.chat.stop"].tap()

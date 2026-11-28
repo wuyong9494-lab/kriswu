@@ -1229,185 +1229,191 @@ struct WuMindWorkspaceView: View {
     private var transcriptView: some View {
         GeometryReader { viewportGeo in
             ScrollViewReader { scroller in
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 22) {
-                        if turns.isEmpty {
-                            welcomeCanvas
-                                .frame(minHeight: max(0, viewportGeo.size.height - 44))
-                        } else {
-                            if !isTemporaryChat,
-                               let convo = store.activeConversation,
-                               let summary = convo.compactedSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
-                               !summary.isEmpty {
-                                compactedMemoryCard(
-                                    conversationID: convo.id,
-                                    summary: summary,
-                                    compactedCount: max(1, convo.safeCompactedTurnCount)
-                                )
-                            }
-                            if !isTemporaryChat && store.compactingContext {
-                                HStack(spacing: 8) {
-                                    ProgressView().controlSize(.small)
-                                    Text("正在自动压缩早期上下文（保留最近对话 verbatim）…")
-                                        .font(.caption.weight(.medium))
-                                        .foregroundStyle(.secondary)
-                                }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 9)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(Color.indigo.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                        .strokeBorder(Color.indigo.opacity(0.22), lineWidth: 0.8)
-                                )
-                                .accessibilityIdentifier("wumind.context.compacting")
-                            }
-                            ForEach(turns) { turn in
-                                if store.activeTurnID == turn.id {
-                                    WuMindStreamingTurnView(
-                                        turn: turn,
-                                        streamBuffer: store.streamBuffer,
-                                        baseline: usesBaselineStreamPresentation,
-                                        streamSmoothMode: store.preferences.streamSmoothMode,
-                                        thinkingStartedAt: store.thinkingStartedAt,
-                                        elevatedSurface: elevatedSurface,
-                                        subtleBorder: subtleBorder,
-                                        onCopy: copyText,
-                                        onRetryPrompt: { prompt in
-                                            draftState.setText(prompt)
-                                            composerFocused = true
-                                        },
-                                        onRegenerate: {
-                                            guard !generating else { return }
-                                            draftState.setText(turn.question)
-                                            requestSend()
-                                        },
-                                        onManageKey: {
-                                            showingKeyFor = turn.provider
-                                        },
-                                        onOpenWallet: {
-                                            showingWallet = true
-                                        }
-                                    )
-                                } else {
-                                    let canRecover = !isTemporaryChat && (turn.clientRequestID?.isEmpty == false)
-                                    WuMindTurnView(
-                                        turn: turn,
-                                        isLast: turn.id == turns.last?.id,
-                                        isGenerating: turn.state == .generating,
-                                        liveElapsedSeconds: isTemporaryChat ? temporaryElapsedSeconds : 1,
-                                        thinkingStartedAt: nil,
-                                        elevatedSurface: elevatedSurface,
-                                        subtleBorder: subtleBorder,
-                                        onCopy: copyText,
-                                        onRetryPrompt: { prompt in
-                                            draftState.setText(prompt)
-                                            composerFocused = true
-                                        },
-                                        onRegenerate: {
-                                            guard !generating else { return }
-                                            draftState.setText(turn.question)
-                                            requestSend()
-                                        },
-                                        onManageKey: {
-                                            showingKeyFor = turn.provider
-                                        },
-                                        onOpenWallet: {
-                                            showingWallet = true
-                                        },
-                                        onCompare: isTemporaryChat ? nil : {
-                                            dismissKeyboard()
-                                            comparingTurn = turn
-                                        },
-                                        onAdoptComparison: { compID in
-                                            if let cid = store.activeConversationID {
-                                                store.adoptComparison(conversationID: cid, turnID: turn.id, comparisonID: compID)
-                                                Haptics.success()
-                                                ToastCenter.shared.show("已标记采纳该复核版本", style: .success)
-                                            }
-                                        },
-                                        onRecoverTask: canRecover ? {
-                                            guard let cid = store.activeConversationID else { return }
-                                            Task { @MainActor in
-                                                let msg = await store.recoverInterruptedTurn(conversationID: cid, turnID: turn.id)
-                                                ToastCenter.shared.show(msg, style: msg.contains("恢复") ? .success : .info)
-                                            }
-                                        } : nil
-                                    )
-                                    .equatable()
-                                }
-                                if let workID = turn.chatBuildWorkID { chatBuildCard(id: workID) }
-                            }
-                        }
-                        Group {
-                            #if DEBUG
-                            if WuMindStore.longHistoryQA {
-                                Text("离线样本末尾").font(.caption)
-                                    .accessibilityIdentifier("wumind.qa.historyBottom")
+                ZStack(alignment: .bottomTrailing) {
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 22) {
+                            if turns.isEmpty {
+                                welcomeCanvas
+                                    .frame(minHeight: max(0, viewportGeo.size.height - 44))
                             } else {
-                                Color.clear.frame(height: 8)
+                                if !isTemporaryChat,
+                                   let convo = store.activeConversation,
+                                   let summary = convo.compactedSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
+                                   !summary.isEmpty {
+                                    compactedMemoryCard(
+                                        conversationID: convo.id,
+                                        summary: summary,
+                                        compactedCount: max(1, convo.safeCompactedTurnCount)
+                                    )
+                                }
+                                if !isTemporaryChat && store.compactingContext {
+                                    HStack(spacing: 8) {
+                                        ProgressView().controlSize(.small)
+                                        Text("正在自动压缩早期上下文（保留最近对话 verbatim）…")
+                                            .font(.caption.weight(.medium))
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 9)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(Color.indigo.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                            .strokeBorder(Color.indigo.opacity(0.22), lineWidth: 0.8)
+                                    )
+                                    .accessibilityIdentifier("wumind.context.compacting")
+                                }
+                                ForEach(turns) { turn in
+                                    if store.activeTurnID == turn.id {
+                                        WuMindStreamingTurnView(
+                                            turn: turn,
+                                            streamBuffer: store.streamBuffer,
+                                            baseline: usesBaselineStreamPresentation,
+                                            streamSmoothMode: store.preferences.streamSmoothMode,
+                                            thinkingStartedAt: store.thinkingStartedAt,
+                                            elevatedSurface: elevatedSurface,
+                                            subtleBorder: subtleBorder,
+                                            onCopy: copyText,
+                                            onRetryPrompt: { prompt in
+                                                draftState.setText(prompt)
+                                                composerFocused = true
+                                            },
+                                            onRegenerate: {
+                                                guard !generating else { return }
+                                                draftState.setText(turn.question)
+                                                requestSend()
+                                            },
+                                            onManageKey: {
+                                                showingKeyFor = turn.provider
+                                            },
+                                            onOpenWallet: {
+                                                showingWallet = true
+                                            }
+                                        )
+                                    } else {
+                                        let canRecover = !isTemporaryChat && (turn.clientRequestID?.isEmpty == false)
+                                        WuMindTurnView(
+                                            turn: turn,
+                                            isLast: turn.id == turns.last?.id,
+                                            isGenerating: turn.state == .generating,
+                                            liveElapsedSeconds: isTemporaryChat ? temporaryElapsedSeconds : 1,
+                                            thinkingStartedAt: nil,
+                                            elevatedSurface: elevatedSurface,
+                                            subtleBorder: subtleBorder,
+                                            onCopy: copyText,
+                                            onRetryPrompt: { prompt in
+                                                draftState.setText(prompt)
+                                                composerFocused = true
+                                            },
+                                            onRegenerate: {
+                                                guard !generating else { return }
+                                                draftState.setText(turn.question)
+                                                requestSend()
+                                            },
+                                            onManageKey: {
+                                                showingKeyFor = turn.provider
+                                            },
+                                            onOpenWallet: {
+                                                showingWallet = true
+                                            },
+                                            onCompare: isTemporaryChat ? nil : {
+                                                dismissKeyboard()
+                                                comparingTurn = turn
+                                            },
+                                            onAdoptComparison: { compID in
+                                                if let cid = store.activeConversationID {
+                                                    store.adoptComparison(conversationID: cid, turnID: turn.id, comparisonID: compID)
+                                                    Haptics.success()
+                                                    ToastCenter.shared.show("已标记采纳该复核版本", style: .success)
+                                                }
+                                            },
+                                            onRecoverTask: canRecover ? {
+                                                guard let cid = store.activeConversationID else { return }
+                                                Task { @MainActor in
+                                                    let msg = await store.recoverInterruptedTurn(conversationID: cid, turnID: turn.id)
+                                                    ToastCenter.shared.show(msg, style: msg.contains("恢复") ? .success : .info)
+                                                }
+                                            } : nil
+                                        )
+                                        .equatable()
+                                    }
+                                    if let workID = turn.chatBuildWorkID { chatBuildCard(id: workID) }
+                                }
                             }
-                            #else
-                            Color.clear.frame(height: 8)
-                            #endif
-                        }
-                        .id(bottomAnchor)
-                    }
-                    .background {
-                        if generatingInCurrentConversation && scrollFollow.shouldAutoScrollOnStreamTick {
-                            WuMindScrollFollower(
-                                streamBuffer: store.streamBuffer,
-                                viewportHeight: viewportGeo.size.height,
-                                baseline: usesBaselineStreamPresentation
-                            ) { needsScroll in
-                                guard scrollFollow.shouldAutoScrollOnStreamTick else { return }
+                            HStack(spacing: 0) {
                                 #if DEBUG
-                                store.streamBenchmark?.recordFollowCheck(requestedScroll: needsScroll)
+                                if WuMindStore.longHistoryQA {
+                                    Text("离线样本末尾").font(.caption)
+                                        .accessibilityIdentifier("wumind.qa.historyBottom")
+                                }
                                 #endif
-                                guard needsScroll else { return }
-                                var transaction = Transaction()
-                                transaction.disablesAnimations = true
-                                withTransaction(transaction) { scroller.scrollTo(bottomAnchor, anchor: .bottom) }
+                            }
+                            .frame(minHeight: 8)
+                            .id(bottomAnchor)
+                        }
+                        .background {
+                            if generatingInCurrentConversation && scrollFollow.shouldAutoScrollOnStreamTick {
+                                WuMindScrollFollower(
+                                    streamBuffer: store.streamBuffer,
+                                    viewportHeight: viewportGeo.size.height,
+                                    baseline: usesBaselineStreamPresentation
+                                ) { needsScroll in
+                                    guard scrollFollow.shouldAutoScrollOnStreamTick else { return }
+                                    #if DEBUG
+                                    store.streamBenchmark?.recordFollowCheck(requestedScroll: needsScroll)
+                                    #endif
+                                    guard needsScroll else { return }
+                                    var transaction = Transaction()
+                                    transaction.disablesAnimations = true
+                                    withTransaction(transaction) { scroller.scrollTo(bottomAnchor, anchor: .bottom) }
+                                }
                             }
                         }
+                        .padding(.horizontal, 16)
+                        .padding(.top, 12)
+                        .padding(.bottom, 16)
+                        .frame(maxWidth: 760)
+                        .frame(maxWidth: .infinity)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 12)
-                    .padding(.bottom, 16)
-                    .frame(maxWidth: 760)
-                    .frame(maxWidth: .infinity)
-                }
-                .coordinateSpace(name: WuMindScrollFollower.viewport)
-                .accessibilityIdentifier("wumind.transcript.scroll")
-                .scrollDismissesKeyboard(.immediately)
-                .contentShape(Rectangle())
-                .simultaneousGesture(TapGesture().onEnded {
-                    if composerFocused {
-                        dismissKeyboard()
+                    .coordinateSpace(name: WuMindScrollFollower.viewport)
+                    .accessibilityIdentifier("wumind.transcript.scroll")
+                    .scrollDismissesKeyboard(.immediately)
+                    .contentShape(Rectangle())
+                    .simultaneousGesture(TapGesture().onEnded {
+                        if composerFocused {
+                            dismissKeyboard()
+                        }
+                    })
+                    .simultaneousGesture(
+                        DragGesture(minimumDistance: 8).onChanged { value in
+                            let dy = value.translation.height
+                            guard dy > abs(value.translation.width) else { return }
+                            var next = scrollFollow
+                            next.handleUserDrag(translationY: Double(dy), isGenerating: generatingInCurrentConversation)
+                            if next != scrollFollow { scrollFollow = next }
+                        }
+                    )
+                    .onChange(of: turns.last?.id) { _ in
+                        if scrollFollow.shouldAutoScrollOnStreamTick {
+                            scroller.scrollTo(bottomAnchor, anchor: .bottom)
+                        }
                     }
-                })
-                .simultaneousGesture(
-                    DragGesture(minimumDistance: 8).onChanged { value in
-                        let dy = value.translation.height
-                        guard dy > abs(value.translation.width) else { return }
-                        var next = scrollFollow
-                        next.handleUserDrag(translationY: Double(dy), isGenerating: generatingInCurrentConversation)
-                        if next != scrollFollow { scrollFollow = next }
-                    }
-                )
-                .onChange(of: turns.last?.id) { _ in
-                    if scrollFollow.shouldAutoScrollOnStreamTick {
-                        scroller.scrollTo(bottomAnchor, anchor: .bottom)
-                    }
-                }
-                .overlay(alignment: .bottomTrailing) {
                     if generatingInCurrentConversation {
                         Button {
                             if scrollFollow.shouldAutoScrollOnStreamTick {
                                 scrollFollow.pauseFollow()
                             } else {
                                 scrollFollow.jumpToLatest()
-                                scroller.scrollTo(bottomAnchor, anchor: .bottom)
+                                #if DEBUG
+                                if WuMindStore.longHistoryQA {
+                                    print("WUMIND_HISTORY jumpToLatest=true")
+                                }
+                                #endif
+                                var transaction = Transaction()
+                                transaction.disablesAnimations = true
+                                withTransaction(transaction) {
+                                    scroller.scrollTo(bottomAnchor, anchor: .bottom)
+                                }
                             }
                         } label: {
                             Label(scrollFollow.shouldAutoScrollOnStreamTick ? "暂停滚动" : "回到最新",
@@ -1417,6 +1423,8 @@ struct WuMindWorkspaceView: View {
                                 .padding(.vertical, 7)
                                 .background(elevatedSurface, in: Capsule())
                                 .overlay(Capsule().strokeBorder(subtleBorder, lineWidth: 1))
+                                .frame(minHeight: 44)
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("wumind.scroll.followToggle")
